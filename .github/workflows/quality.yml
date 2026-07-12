@@ -32,6 +32,7 @@ jobs:
   browser:
     name: browser (${{ matrix.browser }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -43,10 +44,15 @@ jobs:
         uses: cachix/install-nix-action@a49548c11d9846ad46ecc0115273879b045f001c # v31.10.7
       - name: Configure Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
+      - name: Restore Playwright browser cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ matrix.browser }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install JavaScript dependencies
         run: nix develop path:. -c just bootstrap
-      - name: Install browser system dependencies
-        run: nix develop path:. -c pnpm exec playwright install-deps ${{ matrix.browser }}
+      - name: Install browser runtime
+        run: nix develop path:. -c pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Run deterministic browser tests
         run: >-
           nix develop path:. -c env PLAYWRIGHT_CROSS_BROWSER=1

@@ -18,7 +18,7 @@ verify "rustc" "$(jq -r '.rustc' "$manifest")" "$(rustc --version)"
 verify "cargo" "$(jq -r '.cargo' "$manifest")" "$(cargo --version)"
 verify "node" "$(jq -r '.node' "$manifest")" "$(node --version)"
 verify "pnpm" "$(jq -r '.pnpm' "$manifest")" "$(pnpm --version)"
-verify "TypeScript" "$(jq -r '.typescript' "$manifest")" "$(pnpm exec tsc --version)"
+verify "TypeScript" "$(jq -r '.typescript' "$manifest")" "$(./node_modules/.bin/tsc --version)"
 verify \
   "TypeScript compatibility package" \
   "$(jq -r '.typescriptCompatibilityPackage' "$manifest")" \
@@ -26,7 +26,7 @@ verify \
 verify \
   "TypeScript compatibility" \
   "$(jq -r '.typescriptCompatibility' "$manifest")" \
-  "$(pnpm exec tsc6 --version)"
+  "$(./node_modules/.bin/tsc6 --version)"
 verify \
   "wasm-bindgen" \
   "$(jq -r '.wasmBindgenCli' "$manifest")" \

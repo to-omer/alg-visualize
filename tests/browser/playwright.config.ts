@@ -10,6 +10,7 @@ export default defineConfig({
 	testDir: ".",
 	testMatch: "*.spec.ts",
 	fullyParallel: false,
+	maxFailures: process.env.CI === "true" ? 1 : 0,
 	retries: 0,
 	workers: 1,
 	reporter: [["list"]],

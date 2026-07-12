@@ -53,11 +53,10 @@ just browser-acceptance
 ```
 
 `just browser-compatibility` runs the same production E2E suite against the
-Nix-provided Chromium, Firefox, and WebKit bundle on Linux. On macOS it uses
-the installed Chrome channel plus the project-pinned Firefox and WebKit. Run
-`just bootstrap-browsers` once before the compatibility suite so Playwright can
-place those matching browsers in the user cache without global installation.
-Normal `just browser-check` uses only the installed Chrome channel.
+browser revisions owned by the project-pinned Playwright package. Run `just
+bootstrap-browsers` once so Playwright can place those matching browsers in the
+user cache without global installation. On macOS, Chromium tests use the
+installed Chrome channel. Normal `just browser-check` uses only that channel.
 
 ## Repository structure
 

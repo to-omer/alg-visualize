@@ -482,14 +482,14 @@ just check
 just browser-check
 ```
 
-flake は Rust toolchain、WASM target、Node、pnpm、wasm-bindgen CLI、Biome関連 command、cargo-denyを提供し、LinuxではPlaywright browser bundleも提供する。macOSの通常試験と互換試験のChromium projectはinstalled Chromeを使い、互換試験のFirefoxとWebKitはproject-pinned Playwright CLIがuser cacheへ取得したbrowserを使う。いずれもglobal package installを前提にしない。`toolchain/versions.json` と `scripts/verify-toolchain.sh` が実行中のexact tool versionを照合する。
+flake は Rust toolchain、WASM target、Node、pnpm、wasm-bindgen CLI、Biome関連 command、cargo-denyを提供する。browser binaryはNix packageと混在させず、project-pinned Playwright CLIが指定するrevisionをuser cacheへ取得する。macOSの通常試験と互換試験のChromium projectだけはinstalled Chromeを使う。いずれもglobal package installを前提にしない。`toolchain/versions.json` と `scripts/verify-toolchain.sh` が実行中のexact tool versionを照合する。
 
 production artifact は相対 base pathの static SPA とし、GitHub Pagesへ配置できる。renderer は遅延 importし、初期 JavaScript の parse量を抑える。backend endpoint と runtime secret は存在しない。
 
 GitHub Actions は full commit SHAで固定し、次を分離して実行する。
 
 - format、lint、Rust/TypeScript test、Clippy、WASM production build
-- Chromium、Firefox、WebKit の browser test
+- Chromium、Firefox、WebKit のbrowser test。各jobはPlaywright browser cacheを復元してから不足revisionとsystem dependencyを導入し、最初の失敗で停止する。job全体は15分で打ち切る
 - Rust advisory/license/source と production JavaScript audit
 - main branchの検証成功後だけ Pages deploy
 

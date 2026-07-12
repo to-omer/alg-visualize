@@ -48,15 +48,11 @@
               pkgs.pnpm_11
               pkgs.wasm-bindgen-cli
               pkgs.wasm-tools
-            ]
-            ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.playwright-driver.browsers ];
+            ];
 
             RUST_BACKTRACE = "1";
             SOURCE_DATE_EPOCH = "1";
             PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-            shellHook = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
-            '';
           };
         }
       );
@@ -74,7 +70,6 @@
             targets = [ "wasm32-unknown-unknown" ];
           };
         in
-        assert pkgs.playwright-driver.version == "1.61.1";
         {
           toolchain =
             pkgs.runCommand "alg-visualize-toolchain"
