@@ -47,8 +47,13 @@ jobs:
         run: nix develop path:. -c just bootstrap
       - name: Install browser system dependencies
         run: nix develop path:. -c pnpm exec playwright install-deps ${{ matrix.browser }}
-      - name: Run browser production tests
-        run: nix develop path:. -c env PLAYWRIGHT_CROSS_BROWSER=1 pnpm exec playwright test --config tests/browser/playwright.config.ts --project=${{ matrix.browser }}
+      - name: Run deterministic browser tests
+        run: >-
+          nix develop path:. -c env PLAYWRIGHT_CROSS_BROWSER=1
+          pnpm exec playwright test
+          --config tests/browser/playwright.config.ts
+          --project=${{ matrix.browser }}
+          --grep-invert '@benchmark|@scale'
 
   dependencies:
     runs-on: ubuntu-24.04

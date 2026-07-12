@@ -16,6 +16,8 @@
 		"test:unit": "vitest run apps/web/src",
 		"test:browser": "playwright test --config tests/browser/playwright.config.ts",
 		"test:browser:compat": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts",
+		"test:browser:ci": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts --grep-invert '@benchmark|@scale'",
+		"test:browser:acceptance": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts --project=chromium --grep '@benchmark|@scale'",
 		"check": "pnpm run lint && pnpm run typecheck && pnpm run typecheck:compat && pnpm run test:contracts-ts && pnpm run test:unit"
 	},
 	"dependencies": {

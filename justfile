@@ -62,6 +62,12 @@ browser-check:
 browser-compatibility:
     pnpm run test:browser:compat
 
+browser-ci:
+    pnpm run test:browser:ci
+
+browser-acceptance:
+    pnpm run test:browser:acceptance
+
 dependency-check:
     cargo deny check
     pnpm audit --prod --audit-level high

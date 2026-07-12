@@ -403,8 +403,11 @@ test("Pause stops inside the final operation instead of replaying from the start
 	await expect(page.getByTestId("timeline-readout")).toHaveText("4 / 4");
 	const pause = page.getByRole("button", { name: "Pause", exact: true });
 	await expect(pause).toBeVisible();
-	const stepBeforePause = await page.getByText(/^step \d+\/\d+$/).textContent();
 	await pause.click();
+	await expect(
+		page.getByRole("button", { name: "Run trace", exact: true }),
+	).toBeVisible();
+	const pausedStep = await page.getByText(/^step \d+\/\d+$/).textContent();
 	await page.evaluate(
 		() =>
 			new Promise<void>((resolve) => {
@@ -417,11 +420,8 @@ test("Pause stops inside the final operation instead of replaying from the start
 				requestAnimationFrame(observe);
 			}),
 	);
-	await expect(
-		page.getByRole("button", { name: "Run trace", exact: true }),
-	).toBeVisible();
 	expect(await page.getByText(/^step \d+\/\d+$/).textContent()).toBe(
-		stepBeforePause,
+		pausedStep,
 	);
 	await expect(page.getByTestId("timeline-readout")).toHaveText("4 / 4");
 });
@@ -1056,9 +1056,9 @@ test("Rust generator materializes weighted operations and persisted provenance",
 	expect(editedScenario.payload.operations).not.toHaveProperty("provenance");
 });
 
-test("100,000-operation seeks yield through observable progress", async ({
-	page,
-}) => {
+test("100,000-operation seeks yield through observable progress", {
+	tag: "@scale",
+}, async ({ page }) => {
 	test.setTimeout(120_000);
 	await page.goto("/");
 	await page.getByRole("button", { name: "Generate", exact: true }).click();

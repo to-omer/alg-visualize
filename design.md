@@ -107,7 +107,7 @@ generator は次を指定できる。
 
 ### 応答性
 
-性能判定は development server ではなく production build を使う。1440×900 の headless browser で次を満たすことを継続的に検査する。
+性能判定は development server ではなく production build を使う。1440×900 の headless Chromiumを指定した基準環境で実行し、次を満たすことを受け入れ検査する。
 
 - 1,000 initial entries は全entityを詳細描画する
 - 1,000 entityを32倍速で3秒再生し、p95 frame gapを35 ms未満に保ち、main threadの50 ms以上のlong taskを発生させない
@@ -119,7 +119,11 @@ generator は次を指定できる。
 - WebGL context loss 後に描画状態を復元できる
 - 1操作内で複数回の回転、split、mergeが発生しても、各構造変更eventを別々のanimationとして再生する
 
-絶対時間は GitHub Actions の共有 runner でも安定する閾値にする。比較ベンチマークやアルゴリズム間順位の根拠には使用しない。
+通常のGitHub Actions共有runnerはCPU割当、software rendering、background loadが一定でない。frame gap、long task、絶対時間の合否判定には使わない。
+
+通常CIはproduction buildをChromium、Firefox、WebKitで実行する。状態遷移、最終scene、上限、error、描画modeなど、外部性能に依存しない契約を検査する。
+
+`@benchmark`はframe gap、long task、絶対時間を検査する。`@scale`は最大規模入力を検査する。両方を`just browser-acceptance`で基準環境上のChromiumへまとめて実行する。受け入れ結果にはOS、CPU、browser versionを残し、異なる環境の数値を同一baselineとして比較しない。
 
 ### 描画品質
 
@@ -564,6 +568,7 @@ Rust crate は `unsafe_code = "forbid"` とする。JSON は duplicate/unknown f
 - 通常再生が10秒間継続し、途中で停止せず、操作を進めながらlong taskを発生させないことを検査する
 - 全testで uncaught page error、`console.error`、page crashを共通fixtureにより失敗とする
 - Chromium、Firefox、WebKit で同じ production buildを使う
+- 通常CIは`@benchmark`と`@scale`を除いた決定的なbrowser testを3 engineで実行する。最大規模とハードウェア依存性能は`just browser-acceptance`で別に実行し、通常CIの成否を共有runnerの速度へ依存させない
 
 test は retry、長い固定 sleep、mock Pixi、mock WASMで成功を偽装しない。UI state、Worker response、DOM attribute、PerformanceObserver の観測可能な完了条件を待ち、操作を呼んだ事実だけを成功条件にしない。
 

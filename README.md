@@ -37,8 +37,19 @@ Run the complete local quality suite and production browser tests with:
 
 ```sh
 just check
-just browser-check
+just browser-ci
 just dependency-check
+```
+
+`just browser-ci` is the deterministic production-build suite used by GitHub
+Actions. It runs on Chromium, Firefox, and WebKit in CI and excludes only tests
+tagged `@benchmark` or `@scale`.
+
+Run the hardware-sensitive frame-pacing benchmarks and maximum-size stress
+cases separately on the designated reference machine:
+
+```sh
+just browser-acceptance
 ```
 
 `just browser-compatibility` runs the same production E2E suite against the

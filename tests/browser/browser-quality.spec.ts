@@ -395,7 +395,14 @@ test("modal actions stay above persistent playback controls", async ({
 		.toBe(true);
 });
 
-test("WebGL context loss and restore are observable", async ({ page }) => {
+test("WebGL context loss and restore are observable", async ({
+	browserName,
+	page,
+}) => {
+	test.skip(
+		browserName !== "chromium",
+		"WEBGL_lose_context is not available consistently in headless Firefox and WebKit",
+	);
 	await page.addInitScript(() => {
 		window.__rendererRecoveryAckCount = 0;
 		window.__rendererRecoveryFrameCount = 0;
@@ -922,9 +929,9 @@ test("a structured runtime engine error disables every engine-dependent action",
 	);
 });
 
-test("10,000 entries load through automatic summary LOD without a long task", async ({
-	page,
-}) => {
+test("10,000 entries load through automatic summary LOD without a long task", {
+	tag: "@benchmark",
+}, async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.goto("/");
 	await expect(page.getByTestId("pixi-host")).toHaveAttribute(
@@ -968,10 +975,9 @@ test("10,000 entries load through automatic summary LOD without a long task", as
 	expect(loadLongTasks).toEqual([]);
 });
 
-test("a 1,000-node tree stays detailed and responsive at 32× playback", async ({
-	browserName,
-	page,
-}) => {
+test("a 1,000-node tree stays detailed and responsive at 32× playback", {
+	tag: "@benchmark",
+}, async ({ browserName, page }) => {
 	test.skip(
 		browserName !== "chromium",
 		"Frame pacing is measured in the designated Chromium performance browser",
@@ -1097,10 +1103,9 @@ test("a 1,000-node tree stays detailed and responsive at 32× playback", async (
 	await expect(host).toHaveAttribute("data-zoom", trackedZoom ?? "");
 });
 
-test("an 8,000-node degenerate Splay query stays inside the WASM stack", async ({
-	browserName,
-	page,
-}) => {
+test("an 8,000-node degenerate Splay query stays inside the WASM stack", {
+	tag: "@scale",
+}, async ({ browserName, page }) => {
 	test.skip(
 		browserName !== "chromium",
 		"The generated WASM stack boundary is identical across browser engines",
@@ -1227,10 +1232,9 @@ test("comparison, traversal, and rotation expose their complete visual emphasis"
 	await expect(host).toHaveAttribute("data-structural-transition", "settled");
 });
 
-test("5,000 entities retain detail selection without losing frame pacing", async ({
-	browserName,
-	page,
-}) => {
+test("5,000 entities retain detail selection without losing frame pacing", {
+	tag: "@benchmark",
+}, async ({ browserName, page }) => {
 	test.skip(
 		browserName !== "chromium",
 		"Frame pacing is measured in the designated Chromium performance browser",
@@ -1304,9 +1308,9 @@ test("5,000 entities retain detail selection without losing frame pacing", async
 	expect(pacing.p95GapMs).toBeLessThan(35);
 });
 
-test("an automatic LOD transition restores an understandable camera", async ({
-	page,
-}) => {
+test("an automatic LOD transition restores an understandable camera", {
+	tag: "@scale",
+}, async ({ page }) => {
 	test.setTimeout(90_000);
 	await page.goto("/");
 	await page.getByRole("button", { name: "Generate", exact: true }).click();
@@ -1361,9 +1365,9 @@ test("an automatic LOD transition restores an understandable camera", async ({
 	);
 });
 
-test("10,000 entries remain bounded for the structurally expansive X-fast trie", async ({
-	page,
-}) => {
+test("10,000 entries remain bounded for the structurally expansive X-fast trie", {
+	tag: "@benchmark",
+}, async ({ page }) => {
 	test.setTimeout(90_000);
 	await page.goto("/");
 	await page.getByLabel("Structure", { exact: true }).selectOption("x-fast");
@@ -1466,10 +1470,9 @@ test("10,000 entries remain bounded for the structurally expansive X-fast trie",
 	).toEqual([]);
 });
 
-test("a bulk Scapegoat rebuild validates without blocking the main thread", async ({
-	browserName,
-	page,
-}) => {
+test("a bulk Scapegoat rebuild validates without blocking the main thread", {
+	tag: "@benchmark",
+}, async ({ browserName, page }) => {
 	test.skip(
 		browserName !== "chromium",
 		"Long tasks are measured in the designated Chromium performance browser",
@@ -1568,9 +1571,9 @@ test("a bulk Scapegoat rebuild validates without blocking the main thread", asyn
 	);
 });
 
-test("Run trace completes the default Scenario within ten seconds without a long task", async ({
-	page,
-}) => {
+test("Run trace completes the default Scenario within ten seconds without a long task", {
+	tag: "@benchmark",
+}, async ({ page }) => {
 	await page.goto("/");
 	await expect(page.getByTestId("structure-canvas")).toBeVisible();
 	await expect(page.getByTestId("pixi-host")).toHaveAttribute(
@@ -1609,9 +1612,9 @@ test("Run trace completes the default Scenario within ten seconds without a long
 	).toBeLessThan(10_000);
 });
 
-test("normal playback remains responsive for a continuous ten-second window", async ({
-	page,
-}) => {
+test("normal playback remains responsive for a continuous ten-second window", {
+	tag: "@benchmark",
+}, async ({ page }) => {
 	test.setTimeout(45_000);
 	await page.goto("/");
 	await expect(page.getByTestId("pixi-host")).toHaveAttribute(
