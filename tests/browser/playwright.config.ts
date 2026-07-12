@@ -5,6 +5,9 @@ const chromiumChannel =
 	process.env.PLAYWRIGHT_CHROMIUM_CHANNEL ??
 	(process.platform === "darwin" ? "chrome" : undefined);
 const crossBrowser = process.env.PLAYWRIGHT_CROSS_BROWSER === "1";
+const usePrebuiltApplication = process.env.PLAYWRIGHT_PREBUILT === "1";
+const previewCommand =
+	"node node_modules/vite/bin/vite.js preview --config apps/web/vite.config.ts --host 127.0.0.1 --port 4173";
 
 export default defineConfig({
 	testDir: ".",
@@ -47,8 +50,9 @@ export default defineConfig({
 				},
 			],
 	webServer: {
-		command:
-			"pnpm run build && pnpm exec vite preview --config apps/web/vite.config.ts --host 127.0.0.1 --port 4173",
+		command: usePrebuiltApplication
+			? previewCommand
+			: `pnpm run build && ${previewCommand}`,
 		port: 4173,
 		cwd: repositoryRoot,
 		reuseExistingServer: false,

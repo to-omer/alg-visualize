@@ -57,6 +57,9 @@ browser revisions owned by the project-pinned Playwright package. Run `just
 bootstrap-browsers` once so Playwright can place those matching browsers in the
 user cache without global installation. On macOS, Chromium tests use the
 installed Chrome channel. Normal `just browser-check` uses only that channel.
+GitHub Actions builds the application with Nix, then runs the tests in the
+digest-pinned official Playwright image whose browser runtime matches the
+project package exactly.
 
 ## Repository structure
 
