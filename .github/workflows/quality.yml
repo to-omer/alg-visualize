@@ -30,7 +30,12 @@ jobs:
         run: nix develop path:. -c just check
 
   browser:
+    name: browser (${{ matrix.browser }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
     steps:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -40,10 +45,10 @@ jobs:
         uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: Install JavaScript dependencies
         run: nix develop path:. -c just bootstrap
-      - name: Install browser runtimes
-        run: nix develop path:. -c pnpm exec playwright install --with-deps chromium firefox webkit
-      - name: Run cross-browser production tests
-        run: nix develop path:. -c just browser-compatibility
+      - name: Install browser system dependencies
+        run: nix develop path:. -c pnpm exec playwright install-deps ${{ matrix.browser }}
+      - name: Run browser production tests
+        run: nix develop path:. -c env PLAYWRIGHT_CROSS_BROWSER=1 pnpm exec playwright test --config tests/browser/playwright.config.ts --project=${{ matrix.browser }}
 
   dependencies:
     runs-on: ubuntu-24.04
