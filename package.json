@@ -1,0 +1,47 @@
+{
+	"name": "alg-visualize",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@11.9.0",
+	"scripts": {
+		"build": "pnpm run build:wasm && vite build --config apps/web/vite.config.ts && cp LICENSE-MIT LICENSE-APACHE dist/",
+		"build:wasm": "bash scripts/build-wasm.sh",
+		"dev": "vite --config apps/web/vite.config.ts",
+		"typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p tests/browser/tsconfig.json",
+		"typecheck:compat": "tsc6 --noEmit -p packages/contracts/tsconfig.json && tsc6 --noEmit -p apps/web/tsconfig.json && tsc6 --noEmit -p tests/browser/tsconfig.json",
+		"format": "biome format --write apps/web/src packages/contracts tests/browser",
+		"format:check": "biome format apps/web/src packages/contracts tests/browser",
+		"lint": "biome check apps/web/src packages/contracts tests/browser",
+		"test:contracts-ts": "node packages/contracts/jcs.test.mjs",
+		"test:unit": "vitest run apps/web/src",
+		"test:browser": "playwright test --config tests/browser/playwright.config.ts",
+		"test:browser:compat": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts",
+		"check": "pnpm run lint && pnpm run typecheck && pnpm run typecheck:compat && pnpm run test:contracts-ts && pnpm run test:unit"
+	},
+	"dependencies": {
+		"@codemirror/autocomplete": "6.20.3",
+		"@codemirror/commands": "6.10.4",
+		"@codemirror/lang-json": "6.0.2",
+		"@codemirror/lint": "6.9.7",
+		"@codemirror/state": "6.7.1",
+		"@codemirror/view": "6.43.6",
+		"@radix-ui/react-dialog": "1.1.19",
+		"@radix-ui/react-tooltip": "1.2.12",
+		"pixi.js": "8.19.0",
+		"react": "19.2.7",
+		"react-dom": "19.2.7",
+		"zustand": "5.0.14"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.3",
+		"@playwright/test": "1.61.1",
+		"@typescript/native": "npm:typescript@7.0.2",
+		"@types/node": "26.1.1",
+		"@types/react": "19.2.17",
+		"@types/react-dom": "19.2.3",
+		"@vitejs/plugin-react": "6.0.3",
+		"typescript": "npm:@typescript/typescript6@6.0.2",
+		"vite": "8.1.4",
+		"vitest": "4.1.10"
+	}
+}

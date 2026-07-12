@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"exactOptionalPropertyTypes": true,
+		"lib": ["ESNext", "DOM"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"noEmit": true,
+		"noUncheckedIndexedAccess": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"target": "ES2024",
+		"types": ["node"]
+	},
+	"include": ["*.ts"]
+}

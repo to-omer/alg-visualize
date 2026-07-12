@@ -1,0 +1,88 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Install Nix
+        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+      - name: Configure Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+      - name: Verify flake
+        run: nix flake check path:.
+      - name: Install JavaScript dependencies
+        run: nix develop path:. -c just bootstrap
+      - name: Run deterministic quality checks
+        run: nix develop path:. -c just check
+
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Install Nix
+        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+      - name: Configure Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+      - name: Install JavaScript dependencies
+        run: nix develop path:. -c just bootstrap
+      - name: Run cross-browser production tests
+        run: nix develop path:. -c just browser-compatibility
+
+  dependencies:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Install Nix
+        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+      - name: Configure Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+      - name: Install JavaScript dependencies
+        run: nix develop path:. -c just bootstrap
+      - name: Audit locked dependencies
+        run: nix develop path:. -c just dependency-check
+
+  pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, browser, dependencies]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Install Nix
+        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+      - name: Configure Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+      - name: Install JavaScript dependencies
+        run: nix develop path:. -c just bootstrap
+      - name: Build static application
+        run: nix develop path:. -c just build
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: dist
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-11",
+  "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+  "cargo": "cargo 1.94.0 (85eff7c80 2026-01-15)",
+  "node": "v24.18.0",
+  "pnpm": "11.9.0",
+  "typescript": "Version 7.0.2",
+  "typescriptCompatibilityPackage": "@typescript/typescript6 6.0.2",
+  "typescriptCompatibility": "Version 6.0.3",
+  "wasmBindgenCli": "wasm-bindgen 0.2.121",
+  "releaseBaseline": {
+    "hardware": "Apple M1, 16 GB",
+    "macOSProductVersion": "26.5.2",
+    "macOSBuildVersion": "25F84",
+    "architecture": "arm64"
+  }
+}

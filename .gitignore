@@ -1,0 +1,15 @@
+/.direnv/
+/.pnpm-store/
+/node_modules/
+/packages/wasm/
+/target/
+**/target/
+**/node_modules/
+/artifacts/generated/
+/dist/
+/.playwright-cli/
+/output/
+/playwright-report/
+/test-results/
+*.tsbuildinfo
+.DS_Store

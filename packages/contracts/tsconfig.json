@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"exactOptionalPropertyTypes": true,
+		"lib": ["ES2024"],
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"noEmit": true,
+		"noUncheckedIndexedAccess": true,
+		"rootDir": ".",
+		"strict": true,
+		"target": "ES2024",
+		"types": []
+	},
+	"include": ["jcs.ts"]
+}
