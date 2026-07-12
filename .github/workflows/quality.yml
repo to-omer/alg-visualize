@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install Nix
-        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+        uses: cachix/install-nix-action@a49548c11d9846ad46ecc0115273879b045f001c # v31.10.7
       - name: Configure Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+        uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: Verify flake
         run: nix flake check path:.
       - name: Install JavaScript dependencies
@@ -33,13 +33,15 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install Nix
-        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+        uses: cachix/install-nix-action@a49548c11d9846ad46ecc0115273879b045f001c # v31.10.7
       - name: Configure Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+        uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: Install JavaScript dependencies
         run: nix develop path:. -c just bootstrap
+      - name: Install browser runtimes
+        run: nix develop path:. -c pnpm exec playwright install --with-deps chromium firefox webkit
       - name: Run cross-browser production tests
         run: nix develop path:. -c just browser-compatibility
 
@@ -47,11 +49,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install Nix
-        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+        uses: cachix/install-nix-action@a49548c11d9846ad46ecc0115273879b045f001c # v31.10.7
       - name: Configure Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+        uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: Install JavaScript dependencies
         run: nix develop path:. -c just bootstrap
       - name: Audit locked dependencies
@@ -70,19 +72,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install Nix
-        uses: cachix/install-nix-action@7e1d5bdb99afadeb0885b07e3913a4240e12ede5 # v31
+        uses: cachix/install-nix-action@a49548c11d9846ad46ecc0115273879b045f001c # v31.10.7
       - name: Configure Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+        uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: Install JavaScript dependencies
         run: nix develop path:. -c just bootstrap
       - name: Build static application
         run: nix develop path:. -c just build
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
       - name: Deploy Pages
         id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
