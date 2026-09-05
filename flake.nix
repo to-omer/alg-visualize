@@ -46,6 +46,7 @@
               pkgs.nodejs_24
               pkgs.nixfmt
               pkgs.pnpm_11
+              pkgs.syft
               pkgs.wasm-bindgen-cli
               pkgs.wasm-tools
             ];

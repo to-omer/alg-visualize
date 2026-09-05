@@ -68,59 +68,63 @@ export function traceDescription(event: TraceEvent | undefined): {
 	if (event === undefined) {
 		return {
 			title: "Ready to inspect",
-			detail: "Scenario を読み込み、step または再生で内部動作を確認します。",
+			detail:
+				"Load a Scenario, then step or play to inspect its internal work.",
 		};
 	}
 	const key = event.key == null ? "" : ` ${event.key}`;
 	const descriptions: Record<TraceKind, [string, string]> = {
 		compare: [
 			`Compare${key}`,
-			"検索 key と現在の構造 entry を三方比較します。",
+			"Compare the search key with the current entry.",
 		],
 		descend: [
 			`Follow a link${key}`,
-			"比較結果に対応する構造 link へ探索を進めます。",
+			"Follow the structure link selected by the comparison.",
 		],
 		insert: [
 			`Insert${key}`,
-			"新しい EntryId と構造表現を生成し、live state へ加えます。",
+			"Create a stable EntryId and add its representation to live state.",
 		],
 		overwrite: [
 			`Overwrite${key}`,
-			"EntryId と乱数属性を保ち、value payload だけを更新します。",
+			"Keep the EntryId and random attributes; update only its value payload.",
 		],
 		remove: [
 			`Remove${key}`,
-			"論理 entry を無効化し、構造 link と metadata を修復します。",
+			"Retire the logical entry and repair structural links and metadata.",
 		],
 		"rotate-left": [
 			"Rotate left",
-			"right child を親の位置へ上げ、BST 順序を保って再接続します。",
+			"Promote the right child and reconnect it while preserving BST order.",
 		],
 		"rotate-right": [
 			"Rotate right",
-			"left child を親の位置へ上げ、BST 順序を保って再接続します。",
+			"Promote the left child and reconnect it while preserving BST order.",
 		],
 		"update-metadata": [
 			"Update metadata",
-			"height、size、level、color などの導出値を同期します。",
+			"Synchronize derived height, size, level, color, and related metadata.",
 		],
 		rebuild: [
 			"Rebuild subtree",
-			"既存の NodeId / EntryId を保ったまま balanced order へ再配置します。",
+			"Rearrange into balanced order without changing NodeIds or EntryIds.",
 		],
 		split: [
 			"Split structure",
-			"EntryId を作り直さず、一つの構造領域を二つへ分割します。",
+			"Split one structural region without recreating EntryIds.",
 		],
 		merge: [
 			"Merge structures",
-			"EntryId を維持したまま、隣接する構造領域を統合します。",
+			"Merge adjacent structural regions while preserving EntryIds.",
 		],
-		"move-entry": ["Move entry", "既存 EntryId を別の物理 node へ移動します。"],
+		"move-entry": [
+			"Move entry",
+			"Move an existing EntryId to another physical node.",
+		],
 		result: [
 			"Operation result",
-			"hit、miss、旧 value などの公開結果を確定します。",
+			"Finalize the public result, such as a hit, miss, or previous value.",
 		],
 	};
 	const [title, detail] = descriptions[event.kind];

@@ -1,3 +1,6 @@
+import type { FlowAlgorithmCatalogEntry } from "./flow-algorithm-catalog";
+import type { FlowAlgorithmConformanceContract } from "./flow-algorithm-conformance";
+
 export type ArenaKey = {
 	index: number;
 	generation: number;
@@ -155,13 +158,21 @@ export type EngineFrame = CurrentFrame &
 	>;
 
 export type EngineRequest =
+	| { kind: "get-flow-catalog"; generation: number }
+	| { kind: "get-flow-generator-fixtures"; generation: number }
 	| {
 			kind: "create";
 			generation: number;
 			scenario: string;
 			discardProvenance: boolean;
+			flowInputFormat?: "json" | "dsl";
 	  }
-	| { kind: "next"; generation: number }
+	| {
+			kind: "next";
+			generation: number;
+			/** UI-owned identity used to reject a navigation replaced by pause or seek. */
+			requestSerial?: number;
+	  }
 	| {
 			kind: "commit-ack";
 			generation: number;
@@ -172,7 +183,19 @@ export type EngineRequest =
 			generation: number;
 			accepted: boolean;
 	  }
-	| { kind: "seek"; generation: number; target: number }
+	| {
+			kind: "flow-current-ack";
+			generation: number;
+			publicationId: string;
+			accepted: boolean;
+	  }
+	| {
+			kind: "seek";
+			generation: number;
+			target: number;
+			/** UI-owned identity used to reject a response from a replaced seek. */
+			requestSerial?: number;
+	  }
 	| {
 			kind: "prepare-dsl";
 			generation: number;
@@ -206,10 +229,20 @@ export type EngineRequest =
 			scenario: string;
 			algorithm: string;
 			config: Record<string, unknown>;
-	  }
-	| { kind: "dispose"; generation: number };
+	  };
 
 export type EngineResponse =
+	| {
+			kind: "flow-catalog";
+			generation: number;
+			entries: FlowAlgorithmCatalogEntry[];
+			conformance: FlowAlgorithmConformanceContract[];
+	  }
+	| {
+			kind: "flow-generator-fixtures";
+			generation: number;
+			fixtures: import("./flow-generator-fixture").FlowGeneratorFixture[];
+	  }
 	| {
 			kind: "ready";
 			generation: number;
@@ -221,12 +254,35 @@ export type EngineResponse =
 			scenario?: string;
 	  }
 	| { kind: "commit"; generation: number; packet: ArrayBuffer }
-	| { kind: "seeked"; generation: number; packet: ArrayBuffer }
+	| {
+			kind: "flow-ready";
+			generation: number;
+			publicationId: string;
+			algorithm: string;
+			parts: ArrayBuffer[];
+			scenario: string;
+	  }
+	| {
+			kind: "flow-update";
+			generation: number;
+			publicationId: string;
+			algorithm: string;
+			parts: ArrayBuffer[];
+			/** Present when this publication completes a serial-owned navigation. */
+			seekRequestSerial?: number;
+	  }
+	| {
+			kind: "seeked";
+			generation: number;
+			packet: ArrayBuffer;
+			seekRequestSerial?: number;
+	  }
 	| {
 			kind: "seek-progress";
 			generation: number;
 			cursor: number;
 			target: number;
+			seekRequestSerial?: number;
 	  }
 	| {
 			kind: "index-progress" | "index-ready";
@@ -266,12 +322,19 @@ export type EngineResponse =
 			scenario: string;
 			revisionStatus: "current" | "legacy-derived";
 	  }
-	| { kind: "ended"; generation: number }
+	| {
+			kind: "ended";
+			generation: number;
+			seekRequestSerial?: number;
+	  }
 	| {
 			kind: "error";
 			generation: number;
+			/** Identifies the failed request without consulting mutable UI state. */
+			requestKind: EngineRequest["kind"];
 			message: string;
 			source: "engine" | "input";
+			seekRequestSerial?: number;
 	  };
 
 export function entityIdKey(id: StructureEntityId): string {

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/flow",
   "crates/visualizer-core",
   "crates/ordered-map",
   "crates/visualizer-wasm",

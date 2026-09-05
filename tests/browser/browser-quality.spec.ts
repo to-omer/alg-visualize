@@ -19,6 +19,7 @@ declare global {
 		__rendererRecoveryFrameCount?: number;
 		__rendererRecoverySeekCount?: number;
 		__seekDecodeRaceTriggered?: boolean;
+		__unmountDecodeRaceTriggered?: boolean;
 	}
 }
 
@@ -158,6 +159,132 @@ test("light-theme pseudocode metadata keeps WCAG AA text contrast", async ({
 	expect(minimumContrast).toBeGreaterThanOrEqual(4.5);
 });
 
+test("light-theme flow rails and signed-cost channels keep graphical contrast", async ({
+	page,
+}) => {
+	await page.emulateMedia({ colorScheme: "light" });
+	await page.goto("/");
+	await page.getByTestId("min-cost-flow-workspace-tab").click();
+	const graph = page.getByRole("img", { name: "Validated flow network" });
+	await expect(graph).toBeVisible();
+	const contrast = await graph.evaluate((element) => {
+		const parseRgb = (color: string): [number, number, number] => {
+			const channels = color
+				.match(/[\d.]+/g)
+				?.slice(0, 3)
+				.map(Number);
+			if (channels === undefined || channels.length !== 3) {
+				throw new Error(`expected RGB color, received ${color}`);
+			}
+			return [channels[0] ?? 0, channels[1] ?? 0, channels[2] ?? 0];
+		};
+		const linear = (channel: number) => {
+			const normalized = channel / 255;
+			return normalized <= 0.04045
+				? normalized / 12.92
+				: ((normalized + 0.055) / 1.055) ** 2.4;
+		};
+		const luminance = ([red, green, blue]: [number, number, number]) =>
+			0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
+		const ratio = (
+			first: [number, number, number],
+			second: [number, number, number],
+		) => {
+			const light = Math.max(luminance(first), luminance(second));
+			const dark = Math.min(luminance(first), luminance(second));
+			return (light + 0.05) / (dark + 0.05);
+		};
+		const panel = element.closest(".flow-canvas-panel");
+		if (panel === null) throw new Error("missing flow canvas panel");
+		const background = parseRgb(getComputedStyle(panel).backgroundColor);
+		const namespace = "http://www.w3.org/2000/svg";
+		const sample = (
+			markClass: string,
+			groupClass: string,
+			property: "fill" | "stroke",
+		) => {
+			const group = document.createElementNS(namespace, "g");
+			group.setAttribute("class", groupClass);
+			const mark = document.createElementNS(namespace, "path");
+			mark.setAttribute("class", markClass);
+			group.append(mark);
+			element.append(group);
+			const style = getComputedStyle(mark);
+			const value = parseRgb(style[property]);
+			const opacity = Number(style.opacity);
+			group.remove();
+			return { value, opacity };
+		};
+		const composite = (
+			foreground: [number, number, number],
+			opacity: number,
+			underlay: [number, number, number],
+		) =>
+			foreground.map(
+				(channel, index) =>
+					channel * opacity + (underlay[index] ?? 0) * (1 - opacity),
+			) as [number, number, number];
+		const halo = sample("flow-cost-halo", "", "stroke").value;
+		const results: Record<string, number> = {};
+		const renderedEdge = element.querySelector<SVGGElement>(
+			"[data-edge-id]:has(> .flow-capacity-rail)",
+		);
+		if (renderedEdge === null)
+			throw new Error("missing rendered original edge");
+		const renderedMarks = [...renderedEdge.children].filter(
+			(child): child is SVGPathElement => child instanceof SVGPathElement,
+		);
+		const railIndex = renderedMarks.findIndex((mark) =>
+			mark.classList.contains("flow-capacity-rail"),
+		);
+		const costIndex = renderedMarks.findIndex((mark) =>
+			mark.classList.contains("flow-cost-line"),
+		);
+		const flowIndex = renderedMarks.findIndex((mark) =>
+			mark.classList.contains("flow-flow-line"),
+		);
+		if (!(costIndex < railIndex && railIndex < flowIndex)) {
+			throw new Error("expected cost, capacity, flow DOM paint order");
+		}
+		const railWidth = Number(
+			renderedMarks[railIndex]?.getAttribute("stroke-width"),
+		);
+		const costWidth = Number(
+			renderedMarks[costIndex]?.getAttribute("stroke-width"),
+		);
+		const flowWidth = Number(
+			renderedMarks[flowIndex]?.getAttribute("stroke-width"),
+		);
+		if (!(costWidth > railWidth && railWidth > flowWidth)) {
+			throw new Error("expected visible cost, capacity, and flow boundaries");
+		}
+		for (const state of ["", "flow-edge-active", "flow-entity-selected"]) {
+			const rail = sample("flow-capacity-rail", state, "stroke").value;
+			results[`rail:${state || "normal"}`] = ratio(rail, background);
+			for (const kind of ["positive", "negative", "zero"] as const) {
+				for (let band = 0; band <= 4; band += 1) {
+					const cost = sample(
+						`flow-cost-line flow-cost-${kind} flow-cost-magnitude-${band}`,
+						state,
+						"stroke",
+					);
+					results[`cost:${kind}:${band}:${state || "normal"}`] = ratio(
+						composite(cost.value, cost.opacity, halo),
+						halo,
+					);
+				}
+				const arrow = sample(`flow-arrow-${kind}`, "", "fill").value;
+				results[`arrow:${kind}:halo`] = ratio(arrow, halo);
+				results[`arrow:${kind}:canvas`] = ratio(arrow, background);
+			}
+		}
+		return results;
+	});
+	for (const [selector, minimum] of Object.entries(contrast)) {
+		expect(minimum, selector).toBeGreaterThanOrEqual(3);
+	}
+});
+
 test("a generation change after create decoding starts rejects the stale frame", async ({
 	page,
 }) => {
@@ -225,6 +352,78 @@ test("a generation change after create decoding starts rejects the stale frame",
 	await expect(page.getByTestId("engine-status")).toHaveText("ready");
 	await page.getByRole("button", { name: "Next step" }).click();
 	await expect(page.getByTestId("timeline-readout")).toHaveText("1 / 4");
+});
+
+test("unmounting during packet decoding cannot republish the disposed Ordered Map session", async ({
+	page,
+}) => {
+	await page.addInitScript(() => {
+		window.__unmountDecodeRaceTriggered = false;
+		const NativeWorker = window.Worker;
+		class UnmountDecodeRaceWorker extends NativeWorker {
+			constructor(scriptURL: string | URL, options?: WorkerOptions) {
+				super(scriptURL, options);
+				const add = this.addEventListener.bind(this);
+				this.addEventListener = ((
+					type: string,
+					listener: EventListenerOrEventListenerObject | null,
+					options?: AddEventListenerOptions | boolean,
+				) => {
+					if (listener === null) return;
+					if (type !== "message") {
+						add(type, listener, options);
+						return;
+					}
+					add(
+						type,
+						(event: Event) => {
+							const deliver = () => {
+								if (typeof listener === "function") listener.call(this, event);
+								else listener.handleEvent(event);
+							};
+							const data = (event as MessageEvent<unknown>).data;
+							if (
+								window.__unmountDecodeRaceTriggered === false &&
+								typeof data === "object" &&
+								data !== null &&
+								"kind" in data &&
+								data.kind === "ready"
+							) {
+								window.__unmountDecodeRaceTriggered = true;
+								deliver();
+								const flowTab = [...document.querySelectorAll("button")].find(
+									(button) => button.textContent?.trim() === "Max Flow",
+								);
+								if (!(flowTab instanceof HTMLButtonElement)) {
+									throw new Error("Max Flow workspace tab is missing");
+								}
+								flowTab.click();
+								return;
+							}
+							deliver();
+						},
+						options,
+					);
+				}) as Worker["addEventListener"];
+			}
+		}
+		window.Worker = UnmountDecodeRaceWorker;
+	});
+	await page.goto("/");
+	await page.getByRole("button", { name: "Load", exact: true }).click();
+	await expect(
+		page.getByRole("heading", { name: "Max Flow", level: 1 }),
+	).toBeVisible();
+	await expect(
+		page.getByRole("img", { name: "Validated flow network" }),
+	).toBeVisible();
+
+	await page.getByRole("button", { name: "Ordered Map", exact: true }).click();
+	await expect(page.getByTestId("engine-status")).toHaveText("idle");
+	await expect(page.getByTestId("timeline-readout")).toHaveText("0 / 0");
+	await page.getByRole("button", { name: "Load", exact: true }).click();
+	await expect(page.getByTestId("engine-status")).toHaveText("ready");
+	await expect(page.getByTestId("timeline-readout")).toHaveText("0 / 4");
 });
 
 test("a generation change after seek decoding starts keeps the old boundary", async ({
@@ -785,7 +984,7 @@ test("a Worker bootstrap failure becomes a repair-oriented UI error", async ({
 	).toBeVisible();
 	await expect(
 		page.getByText(
-			"ページを再読み込みしてください。解消しない場合は、対応ブラウザで開き直します。",
+			"Reload the page. If the issue persists, use a supported browser.",
 			{ exact: true },
 		),
 	).toBeVisible();
@@ -817,7 +1016,7 @@ test("a WASM bootstrap failure is fatal instead of blaming Scenario input", asyn
 	).toBeVisible();
 	await expect(
 		page.getByText(
-			"ページを再読み込みしてください。解消しない場合は、対応ブラウザで開き直します。",
+			"Reload the page. If the issue persists, use a supported browser.",
 			{ exact: true },
 		),
 	).toBeVisible();
@@ -877,6 +1076,7 @@ test("a structured runtime engine error disables every engine-dependent action",
 				data: {
 					kind: "error",
 					generation,
+					requestKind: "next",
 					message: "injected runtime serialization failure",
 					source: "engine",
 				},
@@ -917,13 +1117,12 @@ test("a structured runtime engine error disables every engine-dependent action",
 	const before = await page.evaluate(() => window.__enginePostCount ?? -1);
 	await page.evaluate(() => {
 		for (const element of document.querySelectorAll<HTMLElement>(
-			'button, input[type="range"], select',
+			'.app-shell button, .app-shell input[type="range"], .app-shell select',
 		)) {
 			element.click();
 			element.dispatchEvent(new Event("change", { bubbles: true }));
 		}
 	});
-	await page.waitForTimeout(50);
 	expect(await page.evaluate(() => window.__enginePostCount ?? -1)).toBe(
 		before,
 	);

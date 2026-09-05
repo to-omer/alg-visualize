@@ -256,6 +256,7 @@ test("DSL changes are validated against the selected algorithm before preparatio
 }) => {
 	await page.goto("/");
 	await page.getByLabel("Structure", { exact: true }).selectOption("veb");
+	await expect(page.getByTestId("engine-status")).toHaveText("idle");
 	await page.getByRole("button", { name: "Parameters", exact: true }).click();
 	await page.getByLabel("word bits", { exact: true }).fill("4");
 	await page.getByRole("button", { name: "Apply", exact: true }).click();
@@ -279,6 +280,7 @@ test("both generators validate their complete Scenario against the word universe
 }) => {
 	await page.goto("/");
 	await page.getByLabel("Structure", { exact: true }).selectOption("veb");
+	await expect(page.getByTestId("engine-status")).toHaveText("idle");
 	await page.getByRole("button", { name: "Parameters", exact: true }).click();
 	await page.getByLabel("word bits", { exact: true }).fill("4");
 	await page.getByRole("button", { name: "Apply", exact: true }).click();
@@ -543,6 +545,7 @@ test("B-tree cascades expose every split and merge as a separate animation", asy
 }) => {
 	await page.goto("/");
 	await page.getByLabel("Structure", { exact: true }).selectOption("b-tree");
+	await expect(page.getByTestId("engine-status")).toHaveText("idle");
 	await page.getByRole("button", { name: "Parameters", exact: true }).click();
 	await page.getByLabel("min degree", { exact: true }).fill("2");
 	await page.getByRole("button", { name: "Apply", exact: true }).click();
@@ -784,6 +787,7 @@ test("vEB traversal keeps auxiliary identities and colors the declared edge", as
 }) => {
 	await page.goto("/");
 	await page.getByLabel("Structure", { exact: true }).selectOption("veb");
+	await expect(page.getByTestId("engine-status")).toHaveText("idle");
 	await page.getByRole("button", { name: "DSL", exact: true }).click();
 	await page
 		.getByRole("textbox", { name: "Initial DSL" })
@@ -793,6 +797,7 @@ test("vEB traversal keeps auxiliary identities and colors the declared edge", as
 	await page.getByRole("textbox", { name: "Operations DSL" }).fill("get 7");
 	await page.getByRole("button", { name: "Apply DSL", exact: true }).click();
 	await page.getByRole("button", { name: "Load", exact: true }).click();
+	await expect(page.getByTestId("engine-status")).toHaveText("ready");
 	await page
 		.getByRole("combobox", { name: "Playback granularity" })
 		.selectOption("atomic");

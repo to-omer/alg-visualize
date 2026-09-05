@@ -8,6 +8,7 @@ pub mod dsl;
 pub mod generator;
 pub mod index;
 pub mod jcs;
+pub mod packet_v6;
 pub mod plugin;
 pub mod provenance;
 pub mod rng;

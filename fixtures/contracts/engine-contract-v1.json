@@ -1,0 +1,36 @@
+{
+  "fixtureRevision": 1,
+  "contract": {
+    "contract_schema_version": 1,
+    "accepted_transport_versions": [
+      5,
+      6
+    ],
+    "plugins": [
+      {
+        "plugin_id": "ordered-map",
+        "plugin_ordinal": 1,
+        "result_revision_name": "ordered-map-result/1",
+        "result_schema_version": 1,
+        "metrics_revision_name": "ordered-map-metrics/1",
+        "trace_revision_name": "ordered-map-trace/3",
+        "accepted_frame_revisions": [
+          "scene-frame/5"
+        ]
+      },
+      {
+        "plugin_id": "flow",
+        "plugin_ordinal": 2,
+        "result_revision_name": "flow-result/9",
+        "result_schema_version": 9,
+        "metrics_revision_name": "flow-metrics/6",
+        "trace_revision_name": "flow-trace/9",
+        "accepted_frame_revisions": [
+          "flow-scene/9"
+        ]
+      }
+    ]
+  },
+  "canonical": "{\"accepted_transport_versions\":[5,6],\"contract_schema_version\":1,\"plugins\":[{\"accepted_frame_revisions\":[\"scene-frame/5\"],\"metrics_revision_name\":\"ordered-map-metrics/1\",\"plugin_id\":\"ordered-map\",\"plugin_ordinal\":1,\"result_revision_name\":\"ordered-map-result/1\",\"result_schema_version\":1,\"trace_revision_name\":\"ordered-map-trace/3\"},{\"accepted_frame_revisions\":[\"flow-scene/9\"],\"metrics_revision_name\":\"flow-metrics/6\",\"plugin_id\":\"flow\",\"plugin_ordinal\":2,\"result_revision_name\":\"flow-result/9\",\"result_schema_version\":9,\"trace_revision_name\":\"flow-trace/9\"}]}",
+  "sha256": "0da74de0e458d5f8285742b070a3b8286141ada932441ead7fec3d460f89f98d"
+}

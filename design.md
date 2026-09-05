@@ -1,8 +1,8 @@
-# Ordered Map Algorithm Visualizer 設計
+# Algorithm Visualizer 設計
 
 ## 目的と範囲
 
-このアプリケーションは、ordered map の公開操作と内部構造の変化を同じ時間軸で観察するためのクライアントサイド Web アプリケーションである。利用者は初期状態と操作列を入力または再現可能な方法で生成し、構造、イベント、疑似コード、計測値を同期して確認できる。
+このアプリケーションは、algorithm の公開結果と内部状態の変化を同じ時間軸で観察するためのクライアントサイド Web アプリケーションである。既存の `ordered-map` workspace と、新設する `flow` workspace をビルド時pluginとして持つ。利用者は入力または再現可能なgeneratorからScenarioを作り、構造、イベント、疑似コード、計測値を同期して確認できる。
 
 対象とする ordered map は、[`alg-playground/crates/ordered_map`](https://github.com/to-omer/alg-playground/tree/1d6564b21bab0dca11b75383ed630564e47cf9f6/crates/ordered_map) の実装分類に対応する次の13種類である。参照commitを固定し、元リポジトリの将来変更によって本アプリケーションの意味を暗黙に変えない。
 
@@ -24,7 +24,49 @@
 
 アプリケーションは別リポジトリとして完結し、元リポジトリを実行時依存にしない。バックエンド、ユーザーアカウント、共同編集、任意コード実行、モバイル専用 UI は対象外とする。
 
-将来の sort や flow はビルド時プラグインとして追加する。実行時に第三者コードを読み込む仕組みは持たない。
+将来の sort も同じbuild-time workspace registryへ追加する。実行時に第三者コードを読み込む仕組みは持たない。flow のcatalog、数値契約、可視化は本書を規範とし、出典と実装範囲は [docs/flow-sources.md](./docs/flow-sources.md)、実測release証跡は [docs/reference-performance.md](./docs/reference-performance.md) に記録する。
+
+## Multi-plugin 契約
+
+- append-only plugin ordinal は ordered-map=`1`、flow=`2` とする。
+- root React shell はplugin選択、workspace mount/unmount、Worker disposalだけを担当する。ordered-mapの内部store、replay、rendererをflowと一括抽象化しない。
+- `visualizer-core` はbounded raw Scenario envelope/probe、plugin registry、generic V6 byte containerを所有する。既存ordered-map typed DTOはV5互換のlegacy例外として当面coreに残し、新規flow typed payload/sceneは `crates/flow` が所有する。
+- `visualizer-wasm` のclosed `SessionKind` がplugin probe後にtyped decoder/sessionへdispatchする。plugin crate同士は依存しない。
+- WASMの `engine_contract_json()` とfrontend static registryは起動時にplugin ID/ordinal、transport、frame/result/metrics/trace revisionを照合する。不一致ではsessionを開始しない。
+
+### V5/V6 の分離
+
+ordered-mapのpersisted `scene-frame/5`、Scenario canonical JSON、packet V5 encoder/decoderを凍結する。flowはpersisted `flow-scene/8` と非永続transport V6を使い、`flow-scene/6` と `/7` は専用migrationを明示的に呼んだ場合だけ段階変換する。通常decoderは旧revisionを暗黙受理しない。transport versionとframe revisionを同じrevisionとして扱わない。V5撤去やordered-map DTO移動は独立migrationとし、golden fixtureを変更しない。
+
+### Publication state machine
+
+各sessionのoutstanding candidate/publicationは最大1件とし、`Committed -> Computing -> AwaitingAck -> Committed` のみを許す。ProgressはComputingのまま同じrequestを再開する。exact ACKだけがsolver/projection/cursorを一括commitし、reject、cancel、stale generation、packet failureはcandidateを破棄する。AwaitingAck中の別stage/seekは禁止する。flowのseek cursorはcanonical u64 decimal event IDであり、ordered-mapのitem indexとは別型である。
+
+### Responsive workspace
+
+1024px以上は3-pane、640–1023pxはcanvasと排他的drawer、640px未満はcanvas-firstでInput/Inspector/Catalog/Generatorをfull-screen sheetにする。320×568、200% zoom、keyboard、touchでRun/Pause、step、Fit、各sheetへ到達でき、横overflowを発生させない。
+
+### Flow workspace の描画境界
+
+flow workspace は小規模で厳密な観察を主目的とする。93件のcatalog endpointはtyped dispatchで個別に実行し、`source-complete solver`、`source-defined component`、`project demonstrator`のいずれかをUIと機械契約で明示する。別algorithmへの暗黙fallbackは行わない。50 family・150 presetのgeneratorはRust manifestを正本とし、検索、閉じた分類、9種類の形状preview、seed、生成後の実頂点・辺数、容量・費用範囲、digestを同じprovenanceへ接続する。
+
+描画はcode-native SVGを使い、容量を外側railの太さ、流量を内線の太さ、費用符号を色と線種、費用絶対値を濃さで重複符号化する。algorithm固有状態はtotal overlay contribution registryからprojection、node/edge装飾、SVG、凡例、Inspector、status、accessible descriptionへ接続する。未登録field、余分なfield、意味投影を持たないfieldはfail closedとし、root workspaceやgraph componentでalgorithm IDを列挙しない。
+
+Canvasは100–800%のbounded viewportを持ち、button、wheel、drag、2-pointer pinch、Fitを同じ純粋変換へ集約する。LODはviewport面積、zoom、node/edge数、absolute上限、15%のhysteresisからDetail・Structure・Overviewを決める。Overviewは全entityを決定的clusterへ集約し、描画markを900以下に抑える。これは10万nodeの汎用GPU rendererを意味しない。generatorのallocation防御上限と、solver・ブラウザで快適に観察できる推奨上限を分けて表示する。
+
+Entity navigatorはnode、original edge、residual arc、Overview aggregateを同じstable selection型で扱う。検索結果は上限付きで、種類filter、前後移動、詳細表、SVG上の選択強調を同期する。Canvasはpointer向け補助操作であり、同じentityへkeyboardだけで到達できることを必須とする。
+
+### Flow interaction architecture
+
+Flowの操作面は、solver catalogを共有しつつ`Max Flow`と`Min-Cost Flow`を別workspaceとして公開する。各workspaceはproblem kindからdefault Scenario、表示可能なalgorithm、generator family、edge encodingを導出し、別problemの入力を黙って実行しない。global shellは`Ordered Map`と同じくtop bar、canvas中心のworkspace、固定bottom timelineを持つ。
+
+solverが生成するcanonical traceは表示粒度によって変更しない。client側のplayback policyがevent granularityを`Phase`、`Semantic`、`Micro`へ投影し、非表示eventもACKして次の可視境界まで進む。これによりseek、逆再生、certificateのevent identityを保ったまま、通常は意味単位、調査時はedge inspection単位で観察できる。Edmonds–Karpの探索はBFS開始、各residual edgeの発見、探索完了、path prefixの復元、augmentation commitを別eventとする。
+
+original edgeは同一stable SVG group内で次の順に重ねる。outer cost railは符号をhueとdash、絶対値をcontinuous intensityで表す。neutral capacity railは太さ、inner flow railは占有率に比例する太さを使う。current trace focusはviolet outline、user selectionはwhite dashed outlineとして別layerに置き、data colorを上書きしない。Max Flowではcost railとcost labelを生成しない。通常labelは`FLOW f · CAP u`、Min-Cost Flowだけが独立した`COST ±c`行を追加する。密なsceneではactive、selected、衝突しないsubsetだけを表示する。
+
+generatorの成功はmaterialize、Scenario validation、session create、event 0 publication、dialog closeを一つのtransactionとして扱う。失敗またはcancelでは現在のvalidated sceneを保持する。生成parameter、view mode、playback granularityはproblem別のversioned `localStorage` recordへ保存し、壊れた値と旧revisionを例外なく棄却する。標準generatorは画面で追える範囲を維持しつつ、Max Flowを27 node・50 edge、Min-Cost Flowを24 node・80 edgeから開始する。
+
+640px未満ではtop bar actionを3列2段にし、InputとInspectorを排他的sheetへ移す。canvas metadataはgraph view、event、compact visual keyだけを残す。密なgraphの通常頂点IDはcanvas上で常時表示せず、source、sink、選択中の頂点を優先する。base entityのDOM identityとdata channel styleはstep間で維持する。current eventが読んだentityだけに`data-event-touch`、renderer-visible stateが変化したentityだけに`data-event-change`を付ける。二集合は独立であり、前後eventの和集合に含まれないentityのDOM投影は変化させない。
 
 ## 利用者が行えること
 
@@ -428,9 +470,9 @@ patch適用は変更対象をstable IDで引けるindex上で行い、eventご�
 
 ## 拡張境界
 
-core は plugin ordinal、Scenario envelope、timeline cursor、metrics vector、opaque result payloadのbuild-time registry contractを持つ。現在の実行経路はordered-map専用のframe、patch、replay、layout型を使い、これらをplugin非依存であるとは扱わない。`PluginRegistry`はordinalとcatalog revisionの追加規則を固定するが、単独で新pluginを実行可能にする動的plugin機構ではない。
+core は plugin ordinal、bounded raw Scenario probe、generic V6 byte containerのbuild-time contractを持つ。legacy ordered-map contractを除き、timeline cursor、metrics、result、frame、patch、replay、layout型はpluginが所有し、plugin非依存の巨大unionへまとめない。`PluginRegistry`はordinalとcatalog revisionの追加規則を固定するが、単独で新pluginを実行可能にする動的plugin機構ではない。
 
-pluginは入力schema、algorithm/config union、trace catalog、metrics catalog、result schema、可逆state patch、projection、layout、inspector presentationからなる一つのvertical sliceとして追加する。追加時にはWASM sessionのbuild-time enum、packet payloadのplugin判別variant、main threadのdecoder/replay adapter、renderer adapterを同時に登録する。generation、二段階publication、seek/playback scheduling、packet header、camera shell、CSP、deploymentはplugin payloadを解釈しない共有部分として維持する。これにより新plugin追加時の変更点を明示しつつ、現時点で使われない汎用traitやopaque payload変換をproduction経路へ持ち込まない。
+pluginは入力schema、algorithm/config union、trace catalog、metrics catalog、result schema、可逆state patch、projection、layout、inspector presentationからなる一つのvertical sliceとして追加する。追加時にはWASM sessionのbuild-time enum、plugin-local packet payload decoder、独立workspaceを同時に登録する。generation、二段階publication lifecycle、camera shell、CSP、deploymentだけを共有し、cursorやpacket payloadの意味論はpluginが所有する。
 
 sort や flow を追加するときは次を追加する。
 
@@ -438,9 +480,9 @@ sort や flow を追加するときは次を追加する。
 - Scenario payload と generator
 - result、trace、metrics catalog
 - plugin stateの可逆patchとplugin固有sceneへのprojection
-- packet payload variant、frontend decoder/replay、layout/renderer、入力panel、inspector adapter
+- V6 payload encoder/decoder、frontend replay、layout/renderer、入力panel、inspectorを持つ独立workspace
 
-Worker generation、seek/playback controller、transferable packet header、camera shell、CSP、deployment は再利用する。registry contractのextension testでは、新しいdescriptorを追加しても既存ordinalやrevisionの意味を変更しないことを検査する。plugin固有adapterの結線は、追加したpluginのproduction browser testで検査する。
+Worker generation、publication coordinator、camera shell、CSP、deployment は再利用する。ordered-map V5 header/pathとflow V6 header/pathは並行し、payloadを共通decoderへ押し込めない。registry contractのextension testでは、新しいdescriptorを追加しても既存ordinalやrevisionの意味を変更しないことを検査する。plugin固有workspaceの結線は、追加したpluginのproduction browser testで検査する。
 
 ## ライブラリとツールチェーン
 

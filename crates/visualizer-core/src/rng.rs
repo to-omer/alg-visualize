@@ -14,7 +14,7 @@ pub const MAX_BOUNDED_RNG_DRAWS: u32 = 1_024;
 
 /// Every V1 RNG domain label. The append-only list guards against stream
 /// aliasing between generator stages and algorithm-specific attributes.
-pub const RNG_DOMAIN_LABELS: [&str; 11] = [
+pub const RNG_DOMAIN_LABELS: [&str; 15] = [
     "rng.generator.initial.descriptor-order",
     "rng.generator.initial.key-selection",
     "rng.generator.initial.value",
@@ -26,6 +26,10 @@ pub const RNG_DOMAIN_LABELS: [&str; 11] = [
     "rng.algorithm.skip-list.height",
     "rng.algorithm.y-fast.representative",
     "rng.algorithm.y-fast.bucket-priority",
+    "rng.flow-generator.topology",
+    "rng.flow-generator.capacity",
+    "rng.flow-generator.cost",
+    "rng.flow-generator.supply",
 ];
 
 /// Hash KDF domains are deliberately disjoint from RNG domains.

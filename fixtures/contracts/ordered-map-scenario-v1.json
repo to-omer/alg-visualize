@@ -1,0 +1,46 @@
+{
+  "fixtureRevision": 1,
+  "scenario": {
+    "schema_version": 1,
+    "scenario_encoding_revision": "rfc8785-jcs/1",
+    "plugin": "ordered-map",
+    "reproducibility": {
+      "declared": {
+        "algorithm_revision": "ordered-map/1",
+        "rng_version": 1,
+        "plugin_result_revision": "ordered-map-result/1",
+        "metrics_catalog_revision": "ordered-map-metrics/1",
+        "trace_revision": "ordered-map-trace/3",
+        "projection_revision": "ordered-map-projection/2",
+        "layout_revision": "ordered-map-layout/1",
+        "frame_encoding_revision": "scene-frame/5"
+      }
+    },
+    "payload": {
+      "algorithm": {
+        "id": "avl",
+        "config": {}
+      },
+      "algorithm_seed": "18446744073709551615",
+      "initial": {
+        "entries": [
+          {
+            "key": "7",
+            "value": "α"
+          }
+        ],
+        "show_build": true
+      },
+      "operations": {
+        "items": [
+          {
+            "op": "lower_bound",
+            "key": "7"
+          }
+        ]
+      }
+    }
+  },
+  "canonical": "{\"payload\":{\"algorithm\":{\"config\":{},\"id\":\"avl\"},\"algorithm_seed\":\"18446744073709551615\",\"initial\":{\"entries\":[{\"key\":\"7\",\"value\":\"α\"}],\"show_build\":true},\"operations\":{\"items\":[{\"key\":\"7\",\"op\":\"lower_bound\"}]}},\"plugin\":\"ordered-map\",\"reproducibility\":{\"declared\":{\"algorithm_revision\":\"ordered-map/1\",\"frame_encoding_revision\":\"scene-frame/5\",\"layout_revision\":\"ordered-map-layout/1\",\"metrics_catalog_revision\":\"ordered-map-metrics/1\",\"plugin_result_revision\":\"ordered-map-result/1\",\"projection_revision\":\"ordered-map-projection/2\",\"rng_version\":1,\"trace_revision\":\"ordered-map-trace/3\"}},\"scenario_encoding_revision\":\"rfc8785-jcs/1\",\"schema_version\":1}",
+  "sha256": "3343a15dfa2c26d74f3888e6e0819fe618e440f4a4977e7d05b18f992d364e1c"
+}

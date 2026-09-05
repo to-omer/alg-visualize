@@ -6,6 +6,8 @@
 	"scripts": {
 		"build": "pnpm run build:wasm && vite build --config apps/web/vite.config.ts && cp LICENSE-MIT LICENSE-APACHE dist/",
 		"build:wasm": "bash scripts/build-wasm.sh",
+		"generate:flow-scene-wire": "cargo run -p flow --bin export_flow_scene_contract",
+		"check:flow-scene-wire": "cargo run -p flow --bin export_flow_scene_contract -- --check",
 		"dev": "vite --config apps/web/vite.config.ts",
 		"typecheck": "tsc --noEmit -p packages/contracts/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p tests/browser/tsconfig.json",
 		"typecheck:compat": "tsc6 --noEmit -p packages/contracts/tsconfig.json && tsc6 --noEmit -p apps/web/tsconfig.json && tsc6 --noEmit -p tests/browser/tsconfig.json",
@@ -13,12 +15,16 @@
 		"format:check": "biome format apps/web/src packages/contracts tests/browser",
 		"lint": "biome check apps/web/src packages/contracts tests/browser",
 		"test:contracts-ts": "node packages/contracts/jcs.test.mjs",
-		"test:unit": "vitest run apps/web/src",
+		"test:unit": "vitest run apps/web/src --exclude '**/.direnv/**'",
 		"test:browser": "playwright test --config tests/browser/playwright.config.ts",
 		"test:browser:compat": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts",
+		"test:browser:flow:compat": "pnpm run build && PLAYWRIGHT_PREBUILT=1 PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts tests/browser/flow-ux.spec.ts",
+		"test:browser:flow:representative:fresh": "pnpm run build && PLAYWRIGHT_PREBUILT=1 FLOW_BROWSER_REPRESENTATIVE_AUDIT=1 FLOW_BROWSER_SCREENSHOT_AUDIT_DIR=test-results/flow-visual-audit playwright test --config tests/browser/playwright.config.ts --project=chromium tests/browser/flow-representative-audit.spec.ts",
+		"test:browser:flow:representative": "pnpm run test:browser:flow:representative:fresh && node scripts/flow-visual-audit-artifacts.mjs compare test-results/flow-visual-audit fixtures/flow-visual-audit",
+		"promote:flow:visual-audit": "node scripts/flow-visual-audit-artifacts.mjs promote test-results/flow-visual-audit fixtures/flow-visual-audit",
 		"test:browser:ci": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts --grep-invert '@benchmark|@scale'",
 		"test:browser:acceptance": "PLAYWRIGHT_CROSS_BROWSER=1 playwright test --config tests/browser/playwright.config.ts --project=chromium --grep '@benchmark|@scale'",
-		"check": "pnpm run lint && pnpm run typecheck && pnpm run typecheck:compat && pnpm run test:contracts-ts && pnpm run test:unit"
+		"check": "pnpm run check:flow-scene-wire && pnpm run lint && pnpm run typecheck && pnpm run typecheck:compat && pnpm run test:contracts-ts && pnpm run test:unit"
 	},
 	"dependencies": {
 		"@codemirror/autocomplete": "6.20.3",

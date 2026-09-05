@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -118,6 +121,38 @@ function rawCurrentPacket(payload: string): ArrayBuffer {
 }
 
 describe("frame packet validation", () => {
+	it("freezes the exact ordered-map V5 current and commit bytes", async () => {
+		const fixtureUrl = new URL(
+			"../../../fixtures/contracts/ordered-map-frame-v5.json",
+			import.meta.url,
+		);
+		const fixture = JSON.parse(await readFile(fixtureUrl, "utf8")) as {
+			current: {
+				kind: "current";
+				frame: unknown;
+				packetBytes: number;
+				sha256: string;
+			};
+			commit: {
+				kind: "commit";
+				frame: unknown;
+				packetBytes: number;
+				sha256: string;
+			};
+		};
+
+		for (const golden of [fixture.current, fixture.commit]) {
+			const packet = encodeFramePacket(
+				golden.kind,
+				JSON.stringify(golden.frame),
+			);
+			expect(packet.byteLength).toBe(golden.packetBytes);
+			expect(
+				createHash("sha256").update(new Uint8Array(packet)).digest("hex"),
+			).toBe(golden.sha256);
+		}
+	});
+
 	it("round-trips a bounded current frame", () => {
 		const packet = encodeFramePacket("current", JSON.stringify(currentFrame));
 

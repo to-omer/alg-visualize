@@ -7,9 +7,14 @@ use thiserror::Error;
 
 /// Ordered-map is permanently assigned ordinal one; new plugins append.
 pub const ORDERED_MAP_PLUGIN_ORDINAL: u32 = 1;
+/// Flow is permanently assigned ordinal two.
+pub const FLOW_PLUGIN_ORDINAL: u32 = 2;
+/// Current closed runtime-handshake schema.
+pub const ENGINE_CONTRACT_SCHEMA_VERSION: u32 = 1;
 
 /// Versioned build-time plugin contract advertised during handshake.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginContractDescriptor {
     /// Append-only registry identity.
     pub plugin_ordinal: u32,
@@ -27,6 +32,7 @@ pub struct PluginContractDescriptor {
 
 /// Opaque result transported by playback core without plugin-specific unions.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginResultEnvelope {
     /// Plugin that owns the payload schema.
     pub plugin_ordinal: u32,
@@ -38,6 +44,7 @@ pub struct PluginResultEnvelope {
 
 /// Catalog-ordered absolute metric values.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MetricsVector {
     /// Revision that defines counter meaning and order.
     pub catalog_revision: String,
@@ -47,6 +54,7 @@ pub struct MetricsVector {
 
 /// Generic logical commit fields inspected by playback core.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CoreCommitEnvelope {
     /// Numeric plugin phase ID; meaning remains in the plugin catalog.
     pub phase_id: u32,
@@ -54,6 +62,67 @@ pub struct CoreCommitEnvelope {
     pub metrics: [MetricsVector; 4],
     /// Optional plugin-specific operation result.
     pub plugin_result: Option<PluginResultEnvelope>,
+}
+
+/// Closed plugin row advertised by the runtime handshake.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EnginePluginContractV1 {
+    /// Stable human-readable plugin ID.
+    pub plugin_id: String,
+    /// Append-only plugin ordinal.
+    pub plugin_ordinal: u32,
+    /// Human-readable plugin result revision.
+    pub result_revision_name: String,
+    /// Numeric result payload schema carried by V6.
+    pub result_schema_version: u32,
+    /// Human-readable metrics catalog revision.
+    pub metrics_revision_name: String,
+    /// Human-readable trace catalog revision.
+    pub trace_revision_name: String,
+    /// Plugin-local frame revisions accepted by this runtime.
+    pub accepted_frame_revisions: Vec<String>,
+}
+
+/// Closed runtime contract checked before a session can be created.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EngineContractV1 {
+    /// Must equal `ENGINE_CONTRACT_SCHEMA_VERSION`.
+    pub contract_schema_version: u32,
+    /// Transport containers accepted by this build.
+    pub accepted_transport_versions: Vec<u16>,
+    /// Append-only plugin rows in ordinal order.
+    pub plugins: Vec<EnginePluginContractV1>,
+}
+
+/// Returns the runtime handshake authority in append-only ordinal order.
+#[must_use]
+pub fn engine_contract_v1() -> EngineContractV1 {
+    EngineContractV1 {
+        contract_schema_version: ENGINE_CONTRACT_SCHEMA_VERSION,
+        accepted_transport_versions: vec![5, 6],
+        plugins: vec![
+            EnginePluginContractV1 {
+                plugin_id: "ordered-map".to_owned(),
+                plugin_ordinal: ORDERED_MAP_PLUGIN_ORDINAL,
+                result_revision_name: "ordered-map-result/1".to_owned(),
+                result_schema_version: 1,
+                metrics_revision_name: "ordered-map-metrics/1".to_owned(),
+                trace_revision_name: "ordered-map-trace/3".to_owned(),
+                accepted_frame_revisions: vec!["scene-frame/5".to_owned()],
+            },
+            EnginePluginContractV1 {
+                plugin_id: "flow".to_owned(),
+                plugin_ordinal: FLOW_PLUGIN_ORDINAL,
+                result_revision_name: "flow-result/9".to_owned(),
+                result_schema_version: 9,
+                metrics_revision_name: "flow-metrics/6".to_owned(),
+                trace_revision_name: "flow-trace/9".to_owned(),
+                accepted_frame_revisions: vec!["flow-scene/9".to_owned()],
+            },
+        ],
+    }
 }
 
 /// Plugin registry validation failure.
@@ -148,14 +217,24 @@ impl PluginRegistry {
 /// Returns an error if a source-level fixture change violates registry
 /// identity invariants.
 pub fn plugin_registry() -> Result<PluginRegistry, PluginContractError> {
-    PluginRegistry::new([PluginContractDescriptor {
-        plugin_ordinal: ORDERED_MAP_PLUGIN_ORDINAL,
-        plugin_id: "ordered-map".to_owned(),
-        result_schema_versions: vec![1],
-        metrics_catalog_revisions: vec!["ordered-map-metrics/1".to_owned()],
-        metrics_vector_length: 10,
-        trace_catalog_revisions: vec!["ordered-map-trace/3".to_owned()],
-    }])
+    PluginRegistry::new([
+        PluginContractDescriptor {
+            plugin_ordinal: ORDERED_MAP_PLUGIN_ORDINAL,
+            plugin_id: "ordered-map".to_owned(),
+            result_schema_versions: vec![1],
+            metrics_catalog_revisions: vec!["ordered-map-metrics/1".to_owned()],
+            metrics_vector_length: 10,
+            trace_catalog_revisions: vec!["ordered-map-trace/3".to_owned()],
+        },
+        PluginContractDescriptor {
+            plugin_ordinal: FLOW_PLUGIN_ORDINAL,
+            plugin_id: "flow".to_owned(),
+            result_schema_versions: vec![9],
+            metrics_catalog_revisions: vec!["flow-metrics/6".to_owned()],
+            metrics_vector_length: 16,
+            trace_catalog_revisions: vec!["flow-trace/9".to_owned()],
+        },
+    ])
 }
 
 #[cfg(test)]
@@ -208,5 +287,55 @@ mod tests {
             registry.validate_commit(ORDERED_MAP_PLUGIN_ORDINAL, &commit),
             Err(PluginContractError::InvalidMetrics)
         );
+    }
+
+    #[test]
+    fn engine_contract_ordinals_and_revisions_are_frozen() {
+        let contract = engine_contract_v1();
+
+        assert_eq!(contract.contract_schema_version, 1);
+        assert_eq!(contract.accepted_transport_versions, [5, 6]);
+        assert_eq!(
+            contract
+                .plugins
+                .iter()
+                .map(|plugin| (plugin.plugin_ordinal, plugin.plugin_id.as_str()))
+                .collect::<Vec<_>>(),
+            [(1, "ordered-map"), (2, "flow")]
+        );
+        assert_eq!(
+            contract.plugins[1].accepted_frame_revisions,
+            ["flow-scene/9"]
+        );
+    }
+
+    #[test]
+    fn engine_contract_matches_canonical_cross_language_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../fixtures/contracts/engine-contract-v1.json"
+        ))
+        .expect("engine contract fixture is valid JSON");
+        let expected: EngineContractV1 = serde_json::from_value(fixture["contract"].clone())
+            .expect("engine contract fixture is closed and typed");
+        assert_eq!(engine_contract_v1(), expected);
+
+        let bytes = serde_json::to_vec(&expected).expect("contract serializes");
+        let canonical = crate::jcs::canonicalize(&bytes).expect("contract canonicalizes");
+        assert_eq!(
+            std::str::from_utf8(&canonical).expect("canonical contract is UTF-8"),
+            fixture["canonical"]
+                .as_str()
+                .expect("canonical fixture is a string")
+        );
+        assert_eq!(
+            crate::jcs::sha256_hex(&canonical),
+            fixture["sha256"]
+                .as_str()
+                .expect("fixture digest is a string")
+        );
+
+        let mut unknown = fixture["contract"].clone();
+        unknown["future"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<EngineContractV1>(unknown).is_err());
     }
 }

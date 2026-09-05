@@ -1,0 +1,58 @@
+{
+  "fixtureRevision": 1,
+  "current": {
+    "kind": "current",
+    "frame": {
+      "itemIndex": 0,
+      "itemCount": 1,
+      "structure": {
+        "root": null,
+        "nodes": []
+      },
+      "canonical": {
+        "entries": [],
+        "metrics": {
+          "comparisons": "0",
+          "node_visits": "0",
+          "bit_tests": "0",
+          "rotations": "0",
+          "recolors": "0",
+          "splits": "0",
+          "merges": "0",
+          "rebuild_items": "0",
+          "allocations": "0",
+          "frees": "0"
+        }
+      }
+    },
+    "packetBytes": 347,
+    "sha256": "c49d3c6de5527b45949c74bc82a1366e9ac206085d685ec7f473e2b10e2e591e"
+  },
+  "commit": {
+    "kind": "commit",
+    "frame": {
+      "baseItemIndex": 0,
+      "itemIndex": 1,
+      "itemCount": 1,
+      "initialBuild": false,
+      "result": {
+        "kind": "miss"
+      },
+      "trace": [
+        {
+          "catalog_id": 9,
+          "kind": "result",
+          "node": null,
+          "target": null,
+          "entry": null,
+          "key": "7",
+          "patch_start": 0,
+          "patch_count": 0
+        }
+      ],
+      "patches": []
+    },
+    "packetBytes": 314,
+    "sha256": "df6a30ec54f3f5f7c00e236603b2ae15c6f814fa09df3343f0b09631d31d4800"
+  }
+}

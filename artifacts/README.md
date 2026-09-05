@@ -8,8 +8,11 @@ Generate the current deterministic reports with:
 
 ```sh
 just contract-report
+just sbom
 ```
 
 The reports record deterministic contract revisions and arena behavior for
-release inspection. Product acceptance is enforced by `just check`, the
-browser suites, and dependency auditing.
+release inspection. `sbom` writes a CycloneDX JSON inventory from the locked
+Rust and JavaScript dependency trees. Product acceptance is enforced by
+`just check`, the browser suites, and `just dependency-check`, which regenerates
+the SBOM before auditing advisories, licenses, and dependency sources.

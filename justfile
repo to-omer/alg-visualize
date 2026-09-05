@@ -62,17 +62,37 @@ browser-check:
 browser-compatibility:
     pnpm run test:browser:compat
 
+browser-flow-compatibility:
+    pnpm run test:browser:flow:compat
+
+flow-representative-audit:
+    mkdir -p target/flow-representative-audit
+    FLOW_REPRESENTATIVE_MANIFEST=target/flow-representative-audit/flow-representative-audit.json cargo test -p visualizer-wasm every_algorithm_has_multiple_readable_representative_traces -- --ignored --nocapture
+    cmp fixtures/flow-representative-audit.json target/flow-representative-audit/flow-representative-audit.json
+
+flow-representative-audit-update:
+    FLOW_REPRESENTATIVE_MANIFEST=fixtures/flow-representative-audit.json cargo test -p visualizer-wasm every_algorithm_has_multiple_readable_representative_traces -- --ignored --nocapture
+
+flow-representative-browser-audit: flow-representative-audit
+    pnpm run test:browser:flow:representative
+
 browser-ci:
     pnpm run test:browser:ci
 
 browser-acceptance:
     pnpm run test:browser:acceptance
 
-dependency-check:
+sbom:
+    mkdir -p artifacts/generated
+    syft scan dir:. --source-name alg-visualize --exclude './.git/**' --exclude './.direnv/**' --exclude './artifacts/generated/**' --exclude './dist/**' --exclude './output/**' --exclude './target/**' --exclude './test-results/**' -o cyclonedx-json=artifacts/generated/sbom.cdx.json
+
+dependency-check: sbom
     cargo deny check
     pnpm audit --prod --audit-level high
 
 check: verify-toolchain fmt-check lint rust-test web-check build
+
+release-check: check flow-representative-browser-audit browser-flow-compatibility dependency-check
 
 flake-check:
     nix flake check path:.

@@ -1,6 +1,12 @@
 import init, {
 	canonical_edited_scenario_json,
+	canonical_flow_dsl_json,
+	canonical_flow_scenario_json,
 	canonical_scenario_json,
+	engine_contract_json,
+	flow_algorithm_catalog_json,
+	flow_algorithm_conformance_contracts_json,
+	flow_generator_fixture_manifest_json,
 	generate_initial_json,
 	generate_operations_json,
 	parse_initial_dsl_json,
@@ -9,13 +15,35 @@ import init, {
 	validate_dsl_document_size,
 	WasmSession,
 } from "../../../packages/wasm/visualizer_engine.js";
+import { assertExpectedEngineContractV1 } from "./engine-contract";
 import { engineRequestErrorSource } from "./engine-error-source";
 import type {
 	CurrentFrame,
 	EngineRequest,
 	EngineResponse,
 } from "./engine-types";
+import {
+	decodeFlowAlgorithmCatalog,
+	flowAlgorithmSelectionReason,
+	flowAlgorithmSelectionReasonMessage,
+	flowScenarioSelection,
+} from "./flow-algorithm-catalog";
+import {
+	assertFlowAlgorithmConfig,
+	flowScenarioNodeIds,
+} from "./flow-algorithm-config";
+import { decodeFlowAlgorithmConformanceContracts } from "./flow-algorithm-conformance";
+import { FlowEventPublicationCoordinator } from "./flow-event-publication-coordinator";
+import { decodeFlowGeneratorFixtureManifest } from "./flow-generator-fixture";
+import { FlowSeekPublicationCoordinator } from "./flow-seek-publication-coordinator";
+import {
+	type FlowSessionLease,
+	ownsActiveFlowSession,
+	runWithActiveFlowSession,
+} from "./flow-session-lease";
 import { encodeFramePacket, type FramePacketKind } from "./packet";
+import { encodePublicationV6 } from "./packet-v6";
+import { PublicationCandidateCoordinator } from "./publication-candidate-coordinator";
 import {
 	StagedNextCoordinator,
 	StagedNextRollbackError,
@@ -25,7 +53,18 @@ import { fitsUtf8Budget } from "./utf8-budget";
 let session: WasmSession | undefined;
 let activeGeneration = 0;
 let sessionSerial = 0;
+let nextPublicationId = 1n;
 const stagedNext = new StagedNextCoordinator();
+const stagedFlowCurrent = new PublicationCandidateCoordinator<WasmSession>();
+const stagedFlowEvent = new FlowEventPublicationCoordinator();
+const stagedFlowSeek = new FlowSeekPublicationCoordinator();
+type DeferredFlowNavigationRequest = Extract<
+	EngineRequest,
+	{ kind: "next" | "seek" }
+>;
+let deferredFlowNavigation: DeferredFlowNavigationRequest | undefined;
+let flowNavigationOperation = 0;
+let activeFlowNavigationOperation: number | undefined;
 
 type StagedCurrentPublication =
 	| {
@@ -53,9 +92,13 @@ class EngineBootstrapError extends Error {
 }
 
 let initializationFailure: EngineBootstrapError | undefined;
-const initialized = init().catch((error: unknown) => {
-	initializationFailure = new EngineBootstrapError(error);
-});
+const initialized = init()
+	.then(() => {
+		assertExpectedEngineContractV1(JSON.parse(engine_contract_json()));
+	})
+	.catch((error: unknown) => {
+		initializationFailure = new EngineBootstrapError(error);
+	});
 const MAX_DSL_BYTES = 64 * 1024 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,6 +115,7 @@ function requireSession(): WasmSession {
 function discardStagedCurrent() {
 	const staged = stagedCurrent;
 	stagedCurrent = undefined;
+	stagedFlowCurrent.discard();
 	if (staged?.kind === "create") {
 		staged.candidate.free();
 	} else if (
@@ -80,6 +124,90 @@ function discardStagedCurrent() {
 	) {
 		session?.discard_staged_seek();
 	}
+}
+
+function discardStagedFlowEvent() {
+	const owner = stagedFlowEvent.discard();
+	if (owner === sessionSerial) session?.discard_staged_next();
+}
+
+function discardStagedFlowSeek() {
+	const owner = stagedFlowSeek.cancel();
+	if (
+		session?.plugin_id() === "flow" &&
+		(owner === undefined || owner === sessionSerial)
+	) {
+		session.discard_staged_seek();
+	}
+}
+
+type FlowCurrentAcknowledgement =
+	| Readonly<{ kind: "current" | "event" | "seek"; accepted: boolean }>
+	| undefined;
+
+function acknowledgeFlowCurrent(
+	generation: number,
+	publicationId: string,
+	accepted: boolean,
+): FlowCurrentAcknowledgement {
+	const acknowledgement = stagedFlowCurrent.acknowledge(
+		generation,
+		publicationId,
+		accepted,
+	);
+	if (acknowledgement.kind === "accepted") {
+		const previous = session;
+		session = acknowledgement.candidate;
+		sessionSerial += 1;
+		previous?.free();
+		return { kind: "current", accepted: true };
+	}
+	if (acknowledgement.kind === "rejected") {
+		return { kind: "current", accepted: false };
+	}
+	const eventAcknowledgement = stagedFlowEvent.acknowledge(
+		generation,
+		publicationId,
+		accepted,
+	);
+	if (eventAcknowledgement.kind !== "ignored") {
+		if (
+			eventAcknowledgement.sessionSerial !== sessionSerial ||
+			session === undefined
+		) {
+			return undefined;
+		}
+		if (eventAcknowledgement.kind === "accepted") {
+			session.commit_staged_next();
+		} else {
+			session.discard_staged_next();
+		}
+		return {
+			kind: "event",
+			accepted: eventAcknowledgement.kind === "accepted",
+		};
+	}
+	const seekAcknowledgement = stagedFlowSeek.acknowledge(
+		generation,
+		publicationId,
+		accepted,
+	);
+	if (
+		seekAcknowledgement.kind === "ignored" ||
+		seekAcknowledgement.sessionSerial !== sessionSerial ||
+		session === undefined
+	) {
+		return undefined;
+	}
+	if (seekAcknowledgement.kind === "accepted") {
+		session.commit_staged_seek();
+	} else {
+		session.discard_staged_seek();
+	}
+	return {
+		kind: "seek",
+		accepted: seekAcknowledgement.kind === "accepted",
+	};
 }
 
 function acknowledgeCurrent(generation: number, accepted: boolean) {
@@ -114,25 +242,69 @@ function framePacket(kind: FramePacketKind, json: string): ArrayBuffer {
 	return encodeFramePacket(kind, json);
 }
 
-function fail(generation: number, error: unknown, source: "engine" | "input") {
+function fail(
+	generation: number,
+	error: unknown,
+	source: "engine" | "input",
+	requestKind: EngineRequest["kind"],
+	seekRequestSerial?: number,
+) {
 	respond({
 		kind: "error",
 		generation,
+		requestKind,
 		message: error instanceof Error ? error.message : String(error),
 		source,
+		...(seekRequestSerial === undefined ? {} : { seekRequestSerial }),
 	});
 }
 
 function withoutProvenance(scenario: string): string {
-	const parsed = JSON.parse(scenario) as {
+	let parsed: {
+		plugin?: unknown;
 		payload: {
-			initial: { provenance?: unknown };
-			operations: { provenance?: unknown };
+			initial?: { provenance?: unknown };
+			operations?: { provenance?: unknown };
+			generator_provenance?: unknown;
 		};
 	};
-	delete parsed.payload.initial.provenance;
-	delete parsed.payload.operations.provenance;
+	try {
+		parsed = JSON.parse(scenario) as typeof parsed;
+	} catch (error: unknown) {
+		throw new Error(
+			`invalid Scenario JSON: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	if (parsed.plugin === "flow") {
+		delete parsed.payload.generator_provenance;
+	} else {
+		if (parsed.payload.initial !== undefined)
+			delete parsed.payload.initial.provenance;
+		if (parsed.payload.operations !== undefined)
+			delete parsed.payload.operations.provenance;
+	}
 	return JSON.stringify(parsed);
+}
+
+function scenarioPlugin(source: string): "ordered-map" | "flow" {
+	const parsed: unknown = JSON.parse(source);
+	if (!isRecord(parsed)) throw new Error("Scenario envelope must be an object");
+	if (parsed.plugin === "ordered-map" || parsed.plugin === "flow") {
+		return parsed.plugin;
+	}
+	throw new Error("Scenario plugin is unsupported");
+}
+
+function canonicalForPlugin(source: string): string {
+	return scenarioPlugin(source) === "flow"
+		? canonical_flow_scenario_json(source)
+		: canonical_scenario_json(source);
+}
+
+function canonicalEditedForPlugin(source: string): string {
+	return scenarioPlugin(source) === "flow"
+		? canonical_flow_scenario_json(source)
+		: canonical_edited_scenario_json(source);
 }
 
 function prettyScenario(canonical: string): string {
@@ -191,6 +363,43 @@ function selectedAlgorithm(source: string): {
 	).payload.algorithm;
 }
 
+function assertFlowAlgorithmIsRunnable(
+	source: string,
+	selected: Readonly<{ id: string; config: Record<string, unknown> }>,
+): void {
+	const selectedScenario = flowScenarioSelection(source);
+	if (selectedScenario === undefined) {
+		throw new Error(
+			"Flow execution requires a valid supported model and graph",
+		);
+	}
+	const descriptor = decodeFlowAlgorithmCatalog(
+		flow_algorithm_catalog_json(),
+	).find((entry) => entry.id === selected.id);
+	if (descriptor === undefined) {
+		throw new Error("Selected flow algorithm is not present in the catalog");
+	}
+	const reason = flowAlgorithmSelectionReason(
+		descriptor,
+		selectedScenario.modelKind,
+		selectedScenario.nodeCount,
+		selectedScenario.edgeCount,
+		selectedScenario.graphShape,
+		selectedScenario.dynamicUpdates,
+		selectedScenario.admissionFacts,
+	);
+	if (reason !== "ready") {
+		throw new Error(
+			`Selected flow algorithm is not runnable: ${flowAlgorithmSelectionReasonMessage(descriptor, reason)}`,
+		);
+	}
+	assertFlowAlgorithmConfig(
+		selected.id,
+		selected.config,
+		flowScenarioNodeIds(source),
+	);
+}
+
 function decodeGenerated(
 	json: string,
 	stream: "initial" | "operations",
@@ -226,8 +435,49 @@ type SeekChunk = {
 	frame?: CurrentFrame;
 };
 
-function runSeek(generation: number, target: number) {
-	requireSession().begin_seek(target);
+function runSeek(
+	generation: number,
+	target: number,
+	seekRequestSerial?: number,
+	navigationOperation?: number,
+) {
+	const activeSession = requireSession();
+	if (!Number.isSafeInteger(target) || target < 0) {
+		if (activeSession.plugin_id() === "flow") {
+			discardStagedFlowSeek();
+		} else {
+			activeSession.discard_staged_seek();
+		}
+		fail(
+			generation,
+			new Error("Seek target is invalid"),
+			"input",
+			"seek",
+			seekRequestSerial,
+		);
+		if (navigationOperation !== undefined) {
+			finishFlowNavigation(navigationOperation);
+		}
+		return;
+	}
+	if (activeSession.plugin_id() === "flow") {
+		const operation = stagedFlowSeek.begin();
+		const lease: FlowSessionLease<WasmSession> = {
+			session: activeSession,
+			serial: sessionSerial,
+		};
+		activeSession.discard_staged_seek();
+		activeSession.begin_seek(target);
+		runFlowSeek(
+			generation,
+			lease,
+			operation.operation,
+			seekRequestSerial,
+			navigationOperation,
+		);
+		return;
+	}
+	activeSession.begin_seek(target);
 	const resume = () => {
 		if (generation !== activeGeneration || session === undefined) {
 			return;
@@ -245,7 +495,15 @@ function runSeek(generation: number, target: number) {
 						generation,
 						sessionSerial,
 					};
-					respond({ kind: "seeked", generation, packet }, [packet]);
+					respond(
+						{
+							kind: "seeked",
+							generation,
+							packet,
+							...(seekRequestSerial === undefined ? {} : { seekRequestSerial }),
+						},
+						[packet],
+					);
 				} catch (error: unknown) {
 					discardStagedCurrent();
 					throw error;
@@ -257,14 +515,119 @@ function runSeek(generation: number, target: number) {
 				generation,
 				cursor: chunk.cursor,
 				target: chunk.target,
+				...(seekRequestSerial === undefined ? {} : { seekRequestSerial }),
 			});
 			self.setTimeout(resume, 0);
 		} catch (error: unknown) {
 			session?.discard_staged_seek();
-			fail(generation, error, engineRequestErrorSource("seek", error));
+			fail(
+				generation,
+				error,
+				engineRequestErrorSource("seek", error),
+				"seek",
+				seekRequestSerial,
+			);
 		}
 	};
 	resume();
+}
+
+function runFlowSeek(
+	generation: number,
+	lease: FlowSessionLease<WasmSession>,
+	operation: number,
+	seekRequestSerial?: number,
+	navigationOperation?: number,
+) {
+	const activeSession = lease.session;
+	const finishNavigation = () => {
+		if (navigationOperation !== undefined) {
+			finishFlowNavigation(navigationOperation);
+		}
+	};
+	const resume = async () => {
+		if (
+			!stagedFlowSeek.isCurrent(operation) ||
+			generation !== activeGeneration ||
+			!ownsActiveFlowSession(lease, session, sessionSerial)
+		) {
+			finishNavigation();
+			return;
+		}
+		try {
+			const chunk: unknown = JSON.parse(activeSession.resume_seek_json(128));
+			if (
+				!isRecord(chunk) ||
+				typeof chunk.done !== "boolean" ||
+				typeof chunk.cursor !== "string" ||
+				typeof chunk.target !== "string"
+			) {
+				throw new Error("Flow seek returned an invalid progress contract");
+			}
+			if (!chunk.done) {
+				respond({
+					kind: "seek-progress",
+					generation,
+					cursor: Number(chunk.cursor),
+					target: Number(chunk.target),
+					...(seekRequestSerial === undefined ? {} : { seekRequestSerial }),
+				});
+				self.setTimeout(() => void resume(), 0);
+				return;
+			}
+			if (chunk.frame === undefined) {
+				throw new Error("Completed flow seek omitted its full scene");
+			}
+			const publicationId = nextPublicationId.toString();
+			nextPublicationId += 1n;
+			const parts = await encodePublicationV6(
+				{
+					pluginOrdinal: activeSession.plugin_ordinal(),
+					payloadSchemaVersion: 3,
+					publicationId,
+					generation: generation.toString(),
+				},
+				new TextEncoder().encode(JSON.stringify(chunk.frame)),
+			);
+			if (
+				!stagedFlowSeek.isCurrent(operation) ||
+				generation !== activeGeneration ||
+				!ownsActiveFlowSession(lease, session, sessionSerial)
+			) {
+				finishNavigation();
+				return;
+			}
+			stagedFlowSeek.stage(operation, generation, publicationId, sessionSerial);
+			respond(
+				{
+					kind: "flow-update",
+					generation,
+					publicationId,
+					algorithm: activeSession.algorithm_id(),
+					parts,
+					...(seekRequestSerial === undefined ? {} : { seekRequestSerial }),
+				},
+				parts,
+			);
+			finishNavigation();
+		} catch (error: unknown) {
+			if (
+				stagedFlowSeek.isCurrent(operation) &&
+				ownsActiveFlowSession(lease, session, sessionSerial)
+			) {
+				discardStagedFlowSeek();
+				fail(
+					generation,
+					error,
+					engineRequestErrorSource("seek", error),
+					"seek",
+					seekRequestSerial,
+				);
+			}
+			finishNavigation();
+		}
+	};
+	void resume();
 }
 
 function buildSeekIndex(serial: number) {
@@ -294,27 +657,234 @@ function buildSeekIndex(serial: number) {
 	self.setTimeout(resume, 0);
 }
 
+async function runNext(
+	generation: number,
+	navigationRequestSerial?: number,
+): Promise<void> {
+	const activeSession = requireSession();
+	const lease: FlowSessionLease<WasmSession> = {
+		session: activeSession,
+		serial: sessionSerial,
+	};
+	const json = activeSession.stage_next_json();
+	if (json === undefined) {
+		respond({
+			kind: "ended",
+			generation,
+			...(navigationRequestSerial === undefined
+				? {}
+				: { seekRequestSerial: navigationRequestSerial }),
+		});
+		return;
+	}
+	if (activeSession.plugin_id() === "flow") {
+		const publicationId = nextPublicationId.toString();
+		nextPublicationId += 1n;
+		try {
+			const parts = await encodePublicationV6(
+				{
+					pluginOrdinal: activeSession.plugin_ordinal(),
+					payloadSchemaVersion: 3,
+					publicationId,
+					generation: generation.toString(),
+				},
+				new TextEncoder().encode(json),
+			);
+			if (
+				generation !== activeGeneration ||
+				!ownsActiveFlowSession(lease, session, sessionSerial)
+			) {
+				runWithActiveFlowSession(lease, session, sessionSerial, (owned) =>
+					owned.discard_staged_next(),
+				);
+				return;
+			}
+			stagedFlowEvent.stage(generation, publicationId, sessionSerial);
+			respond(
+				{
+					kind: "flow-update",
+					generation,
+					publicationId,
+					algorithm: activeSession.algorithm_id(),
+					parts,
+					...(navigationRequestSerial === undefined
+						? {}
+						: { seekRequestSerial: navigationRequestSerial }),
+				},
+				parts,
+			);
+		} catch (error: unknown) {
+			runWithActiveFlowSession(lease, session, sessionSerial, (owned) =>
+				owned.discard_staged_next(),
+			);
+			throw error;
+		}
+		return;
+	}
+	stagedNext.stage(generation);
+	try {
+		const packet = framePacket("commit", json);
+		respond({ kind: "commit", generation, packet }, [packet]);
+	} catch (error: unknown) {
+		stagedNext.discard(activeSession);
+		throw error;
+	}
+}
+
+function flowNavigationBlocked(): boolean {
+	return (
+		activeFlowNavigationOperation !== undefined ||
+		stagedFlowCurrent.hasPending() ||
+		stagedFlowEvent.hasPending() ||
+		stagedFlowSeek.hasPending()
+	);
+}
+
+function beginFlowNavigation(): number {
+	flowNavigationOperation += 1;
+	activeFlowNavigationOperation = flowNavigationOperation;
+	return flowNavigationOperation;
+}
+
+function finishFlowNavigation(operation: number): void {
+	if (activeFlowNavigationOperation !== operation) return;
+	activeFlowNavigationOperation = undefined;
+	void runDeferredFlowNavigation();
+}
+
+function invalidateFlowNavigation(): void {
+	flowNavigationOperation += 1;
+	activeFlowNavigationOperation = undefined;
+}
+
+async function startFlowNavigation(
+	request: DeferredFlowNavigationRequest,
+): Promise<void> {
+	const operation = beginFlowNavigation();
+	if (request.kind === "seek") {
+		try {
+			runSeek(
+				request.generation,
+				request.target,
+				request.requestSerial,
+				operation,
+			);
+		} catch (error: unknown) {
+			finishFlowNavigation(operation);
+			throw error;
+		}
+		return;
+	}
+	try {
+		await runNext(request.generation, request.requestSerial);
+	} finally {
+		finishFlowNavigation(operation);
+	}
+}
+
+async function runDeferredFlowNavigation(): Promise<void> {
+	if (flowNavigationBlocked() || deferredFlowNavigation === undefined) return;
+	const deferred = deferredFlowNavigation;
+	deferredFlowNavigation = undefined;
+	if (deferred.generation === activeGeneration) {
+		await startFlowNavigation(deferred);
+	}
+}
+
 self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 	const request = event.data;
 	void initialized
-		.then(() => {
+		.then(async () => {
 			if (initializationFailure !== undefined) {
 				throw initializationFailure;
 			}
 			if (request.generation < activeGeneration) {
 				return;
 			}
+			if (
+				(request.kind === "next" || request.kind === "seek") &&
+				request.generation === activeGeneration &&
+				flowNavigationBlocked()
+			) {
+				deferredFlowNavigation = request;
+				return;
+			}
+			if (request.generation > activeGeneration) {
+				deferredFlowNavigation = undefined;
+				invalidateFlowNavigation();
+			}
 			activeGeneration = request.generation;
 			if (request.kind !== "commit-ack") {
 				stagedNext.discard(session);
 			}
-			if (request.kind !== "current-ack") {
+			if (request.kind !== "flow-current-ack") {
+				discardStagedFlowEvent();
+			}
+			if (request.kind !== "flow-current-ack" && request.kind !== "seek") {
+				discardStagedFlowSeek();
+			}
+			if (
+				request.kind !== "current-ack" &&
+				request.kind !== "flow-current-ack"
+			) {
 				discardStagedCurrent();
 			}
-			if (request.kind !== "seek" && request.kind !== "current-ack") {
+			if (
+				request.kind !== "seek" &&
+				request.kind !== "current-ack" &&
+				request.kind !== "flow-current-ack"
+			) {
 				session?.discard_staged_seek();
 			}
 			switch (request.kind) {
+				case "get-flow-catalog": {
+					const entries = decodeFlowAlgorithmCatalog(
+						flow_algorithm_catalog_json(),
+					);
+					respond({
+						kind: "flow-catalog",
+						generation: request.generation,
+						entries,
+						conformance: decodeFlowAlgorithmConformanceContracts(
+							flow_algorithm_conformance_contracts_json(),
+							entries,
+						),
+					});
+					break;
+				}
+				case "get-flow-generator-fixtures": {
+					respond({
+						kind: "flow-generator-fixtures",
+						generation: request.generation,
+						fixtures: decodeFlowGeneratorFixtureManifest(
+							flow_generator_fixture_manifest_json(),
+						),
+					});
+					break;
+				}
+				case "flow-current-ack": {
+					const acknowledgement = acknowledgeFlowCurrent(
+						request.generation,
+						request.publicationId,
+						request.accepted,
+					);
+					if (
+						acknowledgement !== undefined &&
+						deferredFlowNavigation !== undefined
+					) {
+						const deferred = deferredFlowNavigation;
+						deferredFlowNavigation = undefined;
+						if (
+							(acknowledgement.accepted ||
+								acknowledgement.kind !== "current") &&
+							deferred.generation === activeGeneration
+						) {
+							deferredFlowNavigation = deferred;
+							await runDeferredFlowNavigation();
+						}
+					}
+					break;
+				}
 				case "current-ack": {
 					acknowledgeCurrent(request.generation, request.accepted);
 					break;
@@ -328,11 +898,20 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 					break;
 				}
 				case "create": {
+					const decodedSource =
+						request.flowInputFormat === "dsl"
+							? canonical_flow_dsl_json(request.scenario)
+							: request.scenario;
 					const source = request.discardProvenance
-						? canonical_edited_scenario_json(
-								withoutProvenance(request.scenario),
-							)
-						: request.scenario;
+						? canonicalEditedForPlugin(withoutProvenance(decodedSource))
+						: decodedSource;
+					if (scenarioPlugin(source) === "flow") {
+						const canonical = canonical_flow_scenario_json(source);
+						assertFlowAlgorithmIsRunnable(
+							canonical,
+							selectedAlgorithm(canonical),
+						);
+					}
 					const createdSession = new WasmSession(source);
 					let staged = false;
 					let canonicalScenario: string;
@@ -341,6 +920,41 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 					try {
 						canonicalScenario = createdSession.scenario_json();
 						selected = selectedAlgorithm(canonicalScenario);
+						if (createdSession.plugin_id() === "flow") {
+							const publicationId = nextPublicationId.toString();
+							nextPublicationId += 1n;
+							const parts = await encodePublicationV6(
+								{
+									pluginOrdinal: createdSession.plugin_ordinal(),
+									payloadSchemaVersion: 3,
+									publicationId,
+									generation: request.generation.toString(),
+								},
+								new TextEncoder().encode(createdSession.current_frame_json()),
+							);
+							if (request.generation !== activeGeneration) {
+								createdSession.free();
+								break;
+							}
+							stagedFlowCurrent.stage(
+								request.generation,
+								publicationId,
+								createdSession,
+							);
+							staged = true;
+							respond(
+								{
+									kind: "flow-ready",
+									generation: request.generation,
+									publicationId,
+									algorithm: createdSession.algorithm_id(),
+									parts,
+									scenario: prettyScenario(canonicalScenario),
+								},
+								parts,
+							);
+							break;
+						}
 						packet = framePacket(
 							"current",
 							createdSession.current_frame_json(),
@@ -374,31 +988,11 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 					break;
 				}
 				case "next": {
-					const activeSession = requireSession();
-					const json = activeSession.stage_next_json();
-					if (json === undefined) {
-						respond({ kind: "ended", generation: request.generation });
-					} else {
-						stagedNext.stage(request.generation);
-						try {
-							const packet = framePacket("commit", json);
-							respond(
-								{
-									kind: "commit",
-									generation: request.generation,
-									packet,
-								},
-								[packet],
-							);
-						} catch (error: unknown) {
-							stagedNext.discard(activeSession);
-							throw error;
-						}
-					}
+					await startFlowNavigation(request);
 					break;
 				}
 				case "seek": {
-					runSeek(request.generation, request.target);
+					await startFlowNavigation(request);
 					break;
 				}
 				case "prepare-dsl": {
@@ -564,19 +1158,27 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 					const source = new TextDecoder("utf-8", { fatal: true }).decode(
 						request.bytes,
 					);
-					const canonical = canonical_scenario_json(source);
+					const canonical = canonicalForPlugin(source);
 					const selected = selectedAlgorithm(canonical);
+					const plugin = scenarioPlugin(canonical);
 					respond({
 						kind: "scenario-prepared",
 						generation: request.generation,
 						scenario: prettyScenario(canonical),
-						revisionStatus: revisionStatus(canonical),
+						revisionStatus:
+							plugin === "flow" ? "current" : revisionStatus(canonical),
 						algorithm: selected.id,
 						algorithmConfig: selected.config,
 					});
 					break;
 				}
 				case "set-algorithm": {
+					if (scenarioPlugin(request.scenario) === "flow") {
+						assertFlowAlgorithmIsRunnable(request.scenario, {
+							id: request.algorithm,
+							config: request.config,
+						});
+					}
 					const parsed = JSON.parse(request.scenario) as {
 						payload: {
 							algorithm: { id: string; config: Record<string, unknown> };
@@ -586,9 +1188,7 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 						id: request.algorithm,
 						config: request.config,
 					};
-					const canonical = canonical_edited_scenario_json(
-						JSON.stringify(parsed),
-					);
+					const canonical = canonicalEditedForPlugin(JSON.stringify(parsed));
 					respond({
 						kind: "scenario-prepared",
 						generation: request.generation,
@@ -601,24 +1201,19 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 				}
 				case "export-scenario": {
 					const canonical = request.discardProvenance
-						? canonical_edited_scenario_json(
-								withoutProvenance(request.scenario),
-							)
-						: canonical_scenario_json(request.scenario);
+						? canonicalEditedForPlugin(withoutProvenance(request.scenario))
+						: canonicalForPlugin(request.scenario);
+					const plugin = scenarioPlugin(canonical);
 					respond({
 						kind: "scenario-exported",
 						generation: request.generation,
 						canonical,
 						scenario: prettyScenario(canonical),
-						revisionStatus: revisionStatus(canonical),
+						revisionStatus:
+							plugin === "flow" ? "current" : revisionStatus(canonical),
 					});
 					break;
 				}
-				case "dispose":
-					sessionSerial += 1;
-					session?.free();
-					session = undefined;
-					break;
 			}
 		})
 		.catch((error: unknown) =>
@@ -629,6 +1224,10 @@ self.addEventListener("message", (event: MessageEvent<EngineRequest>) => {
 					error instanceof EngineBootstrapError
 					? "engine"
 					: engineRequestErrorSource(request.kind, error),
+				request.kind,
+				request.kind === "next" || request.kind === "seek"
+					? request.requestSerial
+					: undefined,
 			),
 		);
 });

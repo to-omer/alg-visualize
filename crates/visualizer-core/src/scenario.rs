@@ -36,6 +36,8 @@ pub const PROJECTION_REVISION: &str = "ordered-map-projection/2";
 pub const LAYOUT_REVISION: &str = "ordered-map-layout/1";
 /// Worker frame encoding emitted by this build.
 pub const FRAME_ENCODING_REVISION: &str = "scene-frame/5";
+/// Maximum accepted UTF-8 byte length of one persisted Scenario document.
+pub const MAX_SCENARIO_BYTES: usize = 64 * 1024 * 1024;
 
 /// Strict generic envelope decoded before selecting a build-time plugin.
 #[derive(Debug, Deserialize)]
@@ -301,6 +303,30 @@ pub enum ScenarioError {
     Invalid(&'static str),
 }
 
+/// Decodes and validates only the shared Scenario envelope.
+///
+/// The plugin payload remains an opaque [`RawValue`]. Callers must select a
+/// build-time plugin and perform that plugin's strict typed decode before the
+/// Scenario is admitted for execution.
+///
+/// # Errors
+///
+/// Rejects a document over the shared byte limit, malformed JSON,
+/// duplicate/unknown envelope fields, or unsupported shared revisions.
+pub fn decode_scenario_envelope(bytes: &[u8]) -> Result<RawScenarioEnvelopeV1, ScenarioError> {
+    if bytes.len() > MAX_SCENARIO_BYTES {
+        return Err(ScenarioError::Invalid("Scenario byte limit"));
+    }
+    let raw: RawScenarioEnvelopeV1 = serde_json::from_slice(bytes)?;
+    if raw.schema_version != 1 {
+        return Err(ScenarioError::Unsupported("schema_version"));
+    }
+    if raw.scenario_encoding_revision != SCENARIO_ENCODING_REVISION {
+        return Err(ScenarioError::Unsupported("scenario_encoding_revision"));
+    }
+    Ok(raw)
+}
+
 /// Decodes the generic envelope, selects the ordered-map plugin, and then
 /// strictly decodes its payload.
 ///
@@ -309,13 +335,7 @@ pub enum ScenarioError {
 /// Rejects duplicate/unknown fields, unsupported versions/plugins, noncanonical
 /// unsigned decimal strings, and parameter/resource-limit violations.
 pub fn decode_ordered_map(bytes: &[u8]) -> Result<ScenarioV1, ScenarioError> {
-    let raw: RawScenarioEnvelopeV1 = serde_json::from_slice(bytes)?;
-    if raw.schema_version != 1 {
-        return Err(ScenarioError::Unsupported("schema_version"));
-    }
-    if raw.scenario_encoding_revision != SCENARIO_ENCODING_REVISION {
-        return Err(ScenarioError::Unsupported("scenario_encoding_revision"));
-    }
+    let raw = decode_scenario_envelope(bytes)?;
     if raw.plugin != "ordered-map" {
         return Err(ScenarioError::Unsupported("plugin"));
     }
@@ -588,6 +608,62 @@ mod tests {
 
         assert_eq!(scenario.payload.initial.entries.len(), 1);
         assert_eq!(scenario.payload.operations.items.len(), 1);
+    }
+
+    #[test]
+    fn shared_probe_keeps_a_flow_payload_opaque() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(&valid_json()).expect("fixture JSON is valid");
+        value["plugin"] = serde_json::json!("flow");
+        value["payload"] = serde_json::json!({
+            "future_flow_field": { "unknown_to_core": true }
+        });
+
+        let encoded = serde_json::to_vec(&value).expect("fixture serializes");
+        let raw = decode_scenario_envelope(&encoded).expect("shared envelope is valid");
+
+        assert_eq!(raw.plugin, "flow");
+        assert!(raw.payload.get().contains("future_flow_field"));
+        assert!(matches!(
+            decode_ordered_map(&encoded),
+            Err(ScenarioError::Unsupported("plugin"))
+        ));
+    }
+
+    #[test]
+    fn shared_probe_rejects_oversize_input_before_json_decode() {
+        let oversized_invalid_json = vec![b'!'; MAX_SCENARIO_BYTES + 1];
+
+        assert!(matches!(
+            decode_scenario_envelope(&oversized_invalid_json),
+            Err(ScenarioError::Invalid("Scenario byte limit"))
+        ));
+    }
+
+    #[test]
+    fn ordered_map_scenario_v1_golden_bytes_are_frozen() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../fixtures/contracts/ordered-map-scenario-v1.json"
+        ))
+        .expect("golden fixture JSON is valid");
+        let scenario_bytes =
+            serde_json::to_vec(&fixture["scenario"]).expect("fixture scenario serializes");
+        decode_ordered_map(&scenario_bytes).expect("golden Scenario remains accepted");
+
+        let canonical =
+            crate::jcs::canonicalize(&scenario_bytes).expect("fixture scenario canonicalizes");
+        assert_eq!(
+            std::str::from_utf8(&canonical).expect("canonical JSON is UTF-8"),
+            fixture["canonical"]
+                .as_str()
+                .expect("fixture canonical value is a string")
+        );
+        assert_eq!(
+            crate::jcs::sha256_hex(&canonical),
+            fixture["sha256"]
+                .as_str()
+                .expect("fixture digest is a string")
+        );
     }
 
     #[test]

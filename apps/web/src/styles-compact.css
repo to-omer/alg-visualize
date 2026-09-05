@@ -1,4 +1,28 @@
+@media (min-width: 1101px) and (max-width: 1279px) {
+	.flow-workspace {
+		grid-template-columns: minmax(190px, 0.7fr) minmax(430px, 2fr) minmax(
+				180px,
+				0.65fr
+			);
+	}
+}
+
+@media (min-width: 1101px) and (max-width: 1599px) {
+	.flow-input-bytes,
+	.flow-generate-label-long {
+		display: none;
+	}
+
+	.flow-generate-label-short {
+		display: inline;
+	}
+}
+
 @media (max-width: 1279px) {
+	.flow-message {
+		padding: 0 12px;
+	}
+
 	.topbar {
 		padding: 0 12px;
 	}
@@ -73,6 +97,29 @@
 		column-gap: 10px;
 	}
 
+	.flow-input-panel .panel-heading,
+	.flow-canvas-panel .canvas-heading,
+	.flow-inspector-panel .panel-heading {
+		padding: 0 10px;
+	}
+
+	.flow-input-bytes,
+	.flow-generate-label-long {
+		display: none;
+	}
+
+	.flow-input-format {
+		padding-inline: 8px;
+	}
+
+	.flow-input-format small {
+		display: none;
+	}
+
+	.flow-generate-label-short {
+		display: inline;
+	}
+
 	.canvas-meta {
 		min-width: 0;
 		flex-wrap: wrap;
@@ -84,28 +131,22 @@
 		max-width: 90px;
 	}
 
-	.property-list > .property-row-wide {
-		grid-template-columns: minmax(0, 1fr);
-		row-gap: 3px;
-	}
-
-	.property-row-wide dd {
-		max-width: 100%;
-		text-align: left;
-	}
-
 	.timeline-panel {
 		grid-template-columns: 34px 34px minmax(0, 1fr) 64px 76px 64px 34px 34px;
 		gap: 7px;
 		padding: 0 12px;
 	}
 
-	.timeline-option,
+	.timeline-panel.flow-timeline {
+		grid-template-columns: 34px 34px minmax(0, 1fr) 76px 132px 64px 34px 34px;
+	}
+
+	.timeline-option-control,
 	.timeline-speed {
 		display: block;
 	}
 
-	.timeline-panel .timeline-option > span,
+	.timeline-panel .timeline-option-control > span,
 	.timeline-panel .timeline-speed > span {
 		display: none;
 	}
@@ -113,5 +154,280 @@
 	.timeline-option select,
 	.timeline-speed select {
 		width: 100%;
+	}
+}
+
+/* Phone layout must come after the compact desktop rules above. Otherwise the
+   1279px canvas grid wins in the cascade and forces its metadata off-screen. */
+@media (max-width: 640px) {
+	.flow-shell {
+		grid-template-rows: 150px minmax(0, 1fr) 96px;
+	}
+
+	.timeline-panel.flow-timeline {
+		grid-template-areas:
+			"previous slider slider slider next"
+			"readout readout option option option";
+		grid-template-columns: 44px repeat(3, minmax(0, 1fr)) 44px;
+		grid-template-rows: 44px 34px;
+		gap: 4px;
+		padding: 6px 7px;
+	}
+
+	.flow-timeline > :nth-child(2) {
+		grid-area: previous;
+	}
+
+	.flow-timeline > input[type="range"] {
+		grid-area: slider;
+	}
+
+	.flow-timeline .timeline-readout {
+		grid-area: readout;
+	}
+
+	.flow-timeline .timeline-option {
+		grid-area: option;
+	}
+
+	.flow-timeline > :nth-last-child(2) {
+		grid-area: next;
+	}
+
+	.flow-timeline .timeline-option::before {
+		position: absolute;
+		top: 50%;
+		left: 6px;
+		z-index: 1;
+		color: var(--muted);
+		font-family: var(--font-mono);
+		font-size: 8px;
+		content: "MOVE";
+		transform: translateY(-50%);
+		pointer-events: none;
+	}
+
+	.flow-timeline .timeline-option select {
+		padding-left: 34px;
+	}
+
+	.flow-timeline > :first-child,
+	.flow-timeline > :last-child,
+	.flow-timeline .timeline-speed {
+		display: none;
+	}
+
+	.flow-timeline .transport-button {
+		min-width: 44px;
+		min-height: 44px;
+	}
+
+	.flow-topbar .operation-strip {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		width: 100%;
+		gap: 5px;
+	}
+
+	.flow-topbar .operation-strip > button,
+	.flow-topbar .flow-mobile-panel-controls > button {
+		width: 100%;
+		min-width: 0;
+		padding-inline: 4px;
+	}
+
+	.flow-canvas-panel {
+		grid-template-rows: 90px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-dynamic {
+		grid-template-rows: 90px 64px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-electrical {
+		grid-template-rows: 90px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-parametric {
+		grid-template-rows: 90px minmax(172px, 27vh) minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-ipm-mcf {
+		grid-template-rows: 90px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-minimum-ratio-mcf {
+		grid-template-rows: 90px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-randomized-almost-linear-mcf-oracle-demonstrator {
+		grid-template-rows: 90px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel-deterministic-almost-linear-mcf {
+		grid-template-rows: 90px minmax(0, 1fr) 72px;
+	}
+
+	.flow-canvas-panel .canvas-heading {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		align-content: center;
+		gap: 5px;
+		padding: 6px 9px;
+	}
+
+	.flow-canvas-panel .canvas-heading > div:first-child {
+		min-width: 0;
+	}
+
+	.flow-canvas-panel .canvas-heading h2 {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.flow-canvas-panel .canvas-meta {
+		display: flex;
+		width: 100%;
+		min-width: 0;
+		flex-wrap: nowrap;
+		justify-content: space-between;
+		gap: 5px;
+		overflow: hidden;
+	}
+
+	.flow-canvas-panel .flow-event-count {
+		display: none;
+	}
+
+	.flow-canvas-panel .flow-generation-details {
+		flex: 1 1 80px;
+		max-width: 150px;
+		overflow: hidden;
+	}
+
+	.flow-canvas-panel .flow-generation-details > summary {
+		display: block;
+		max-width: 100%;
+	}
+
+	.flow-generation-inline,
+	.flow-node-count,
+	.flow-edge-count,
+	.flow-lod-level {
+		display: none;
+	}
+
+	.flow-encoding-key {
+		flex: 0 0 auto;
+		gap: 5px;
+	}
+
+	.flow-canvas-panel .flow-encoding-key > span {
+		gap: 0;
+		font-size: 0;
+	}
+
+	.flow-encoding-key i {
+		width: 15px;
+	}
+
+	.flow-edge-label-group {
+		display: none;
+	}
+
+	.flow-edge-route-lane-token-shape {
+		transform-box: fill-box;
+		transform-origin: center;
+		scale: 1.8;
+	}
+
+	.flow-edge-route-lane-token text {
+		font-size: 20px;
+	}
+
+	.flow-edge-hit-target {
+		stroke-width: 44;
+		vector-effect: non-scaling-stroke;
+	}
+
+	.flow-mobile-edge-selection {
+		position: absolute;
+		bottom: 8px;
+		left: 8px;
+		z-index: 5;
+		display: grid;
+		min-width: 0;
+		width: calc(100% - 16px);
+		gap: 6px;
+		padding: 8px;
+		border: 1px solid var(--line-strong);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+		box-shadow: 0 6px 20px #0008;
+	}
+
+	.flow-mobile-edge-selection-summary {
+		display: flex;
+		min-width: 0;
+		width: 100%;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 8px;
+		font-family: var(--font-mono);
+		font-size: 11px;
+	}
+
+	.flow-mobile-edge-selection-id,
+	.flow-mobile-edge-selection-values {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.flow-mobile-parallel-lanes {
+		display: flex;
+		min-width: 0;
+		width: 100%;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		overflow-x: auto;
+		border: 0;
+		overscroll-behavior-x: contain;
+	}
+
+	.flow-mobile-parallel-lane {
+		flex: 0 0 44px;
+		min-width: 44px;
+		min-height: 44px;
+		padding: 0 4px;
+		border: 1px solid var(--line-strong);
+		border-radius: 6px;
+		background: var(--surface);
+		color: var(--text);
+		font: 700 11px var(--font-mono);
+	}
+
+	.flow-mobile-parallel-lane[aria-pressed="true"] {
+		border-color: var(--flow-selection);
+		outline: 2px solid var(--flow-selection);
+		outline-offset: -3px;
+	}
+
+	/* Long generated IDs cannot all remain readable at phone scale. Source and
+	   sink labels stay visible; tapping a normal node reveals its label. */
+	.flow-node-frame-normal:not(.flow-entity-selected):not(
+		[data-event-touch="true"]
+	)
+	.flow-node-label {
+		display: none;
+	}
+
+	/* One explicit callout remains readable on a phone. Other nodes preserve
+	   their algorithm rings/bands and exact values in title/Inspector. */
+	.flow-node-trace-callout:not(.flow-node-trace-priority) {
+		display: none;
 	}
 }

@@ -9,11 +9,14 @@ describe("engine error source", () => {
 		"seek",
 		"commit-ack",
 		"current-ack",
+		"flow-current-ack",
 	] as const)("classifies %s as runtime", (kind) => {
 		expect(engineRequestErrorSource(kind)).toBe("engine");
 	});
 
 	it.each([
+		"get-flow-catalog",
+		"get-flow-generator-fixtures",
 		"create",
 		"prepare-dsl",
 		"generate",
@@ -21,7 +24,6 @@ describe("engine error source", () => {
 		"import-scenario",
 		"export-scenario",
 		"set-algorithm",
-		"dispose",
 	] as const)("classifies %s as input/control", (kind) => {
 		expect(engineRequestErrorSource(kind)).toBe("input");
 	});

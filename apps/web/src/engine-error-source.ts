@@ -19,7 +19,8 @@ export function engineRequestErrorSource(
 	return kind === "next" ||
 		kind === "seek" ||
 		kind === "commit-ack" ||
-		kind === "current-ack"
+		kind === "current-ack" ||
+		kind === "flow-current-ack"
 		? "engine"
 		: "input";
 }

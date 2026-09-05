@@ -51,6 +51,10 @@ export async function processEngineResponse(
 	try {
 		if (response.generation !== context.generation.current) return false;
 		switch (response.kind) {
+			case "flow-ready":
+			case "flow-update":
+				// A flow publication belongs to FlowWorkspace's isolated store.
+				return false;
 			case "ready": {
 				context.traceReplay.current = undefined;
 				context.setSeekCoverage(0);

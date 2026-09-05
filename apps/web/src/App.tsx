@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 
 import { AlgorithmSettingsDialog } from "./AlgorithmSettingsDialog";
 import { processEngineResponse } from "./engine-session-response";
@@ -49,7 +57,101 @@ function useSynchronousCursor(initial: number) {
 	return [current.current, setCurrent] as const;
 }
 
+type WorkspaceId = "ordered-map" | "max-flow" | "min-cost-flow";
+type FlowWorkspaceId = Exclude<WorkspaceId, "ordered-map">;
+
+const FLOW_WORKSPACES = [
+	"max-flow",
+	"min-cost-flow",
+] as const satisfies readonly FlowWorkspaceId[];
+
+const FlowWorkspace = lazy(async () => {
+	const module = await import("./FlowWorkspace");
+	return { default: module.FlowWorkspace };
+});
+
 export function App() {
+	const [workspace, setWorkspace] = useState<WorkspaceId>("ordered-map");
+	const [mountedFlowWorkspaces, setMountedFlowWorkspaces] = useState<
+		ReadonlySet<FlowWorkspaceId>
+	>(() => new Set());
+	const activateWorkspace = useCallback((next: WorkspaceId) => {
+		if (next !== "ordered-map") {
+			setMountedFlowWorkspaces((current) => {
+				if (current.has(next)) return current;
+				return new Set([...current, next]);
+			});
+		}
+		setWorkspace(next);
+	}, []);
+	return (
+		<div className={`workbench-shell workspace-${workspace}`}>
+			<nav className="workspace-switcher" aria-label="Algorithm workspace">
+				<div className="workspace-switcher-brand">
+					<span className="workspace-switcher-mark" aria-hidden="true" />
+					<strong>Algorithm Workbench</strong>
+				</div>
+				<div className="workspace-switcher-tabs">
+					<button
+						type="button"
+						aria-pressed={workspace === "ordered-map"}
+						onClick={() => activateWorkspace("ordered-map")}
+					>
+						Ordered Map
+					</button>
+					<button
+						type="button"
+						data-testid="flow-workspace-tab"
+						aria-pressed={workspace === "max-flow"}
+						onClick={() => activateWorkspace("max-flow")}
+					>
+						Max Flow
+					</button>
+					<button
+						type="button"
+						data-testid="min-cost-flow-workspace-tab"
+						aria-pressed={workspace === "min-cost-flow"}
+						onClick={() => activateWorkspace("min-cost-flow")}
+					>
+						Min-Cost Flow
+					</button>
+				</div>
+			</nav>
+			<div className="workbench-content">
+				{workspace === "ordered-map" && <OrderedMapWorkspace />}
+				{FLOW_WORKSPACES.map((flowWorkspace) =>
+					mountedFlowWorkspaces.has(flowWorkspace) ? (
+						<div
+							key={flowWorkspace}
+							data-workspace-id={flowWorkspace}
+							hidden={workspace !== flowWorkspace}
+							style={{ height: "100%" }}
+						>
+							<Suspense
+								fallback={
+									<div
+										className="workspace-loading"
+										role="status"
+										aria-live="polite"
+									>
+										Loading flow workspace…
+									</div>
+								}
+							>
+								<FlowWorkspace
+									active={workspace === flowWorkspace}
+									problemKind={flowWorkspace}
+								/>
+							</Suspense>
+						</div>
+					) : null,
+				)}
+			</div>
+		</div>
+	);
+}
+
+function OrderedMapWorkspace() {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [errorSource, setErrorSource] = useState<
@@ -113,6 +215,15 @@ export function App() {
 		setStatus,
 		status,
 	} = useVisualizerStore();
+	useEffect(
+		() => () => {
+			generation.current += 1;
+			const store = useVisualizerStore.getState();
+			store.clearFrame();
+			store.setStatus("idle");
+		},
+		[],
+	);
 	const fatalError = error !== undefined && errorSource !== "input";
 	const reportEngineError = useCallback(
 		(message: string, source: "renderer" | "worker" = "worker") => {
@@ -577,10 +688,10 @@ export function App() {
 			: "Current revisions";
 	const errorGuidance =
 		errorSource === "worker"
-			? "ページを再読み込みしてください。解消しない場合は、対応ブラウザで開き直します。"
+			? "Reload the page. If the issue persists, use a supported browser."
 			: errorSource === "renderer"
-				? "再生を停止しました。ページを再読み込みし、WebGL が有効なブラウザで開き直します。"
-				: "Scenario の該当箇所を修正して、もう一度読み込みます。";
+				? "Playback stopped. Reload the page in a browser with WebGL enabled."
+				: "Correct the indicated Scenario field and load it again.";
 	const openDialog = (dialog: "generator" | "settings") => {
 		if (fatalError) {
 			return;

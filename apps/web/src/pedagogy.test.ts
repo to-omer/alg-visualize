@@ -55,7 +55,8 @@ describe("pedagogy presentation", () => {
 
 		expect(traceDescription(event)).toEqual({
 			title: "Rotate left",
-			detail: "right child を親の位置へ上げ、BST 順序を保って再接続します。",
+			detail:
+				"Promote the right child and reconnect it while preserving BST order.",
 		});
 		expect(eventActiveKey(event)).toBe("auxiliary:2:0");
 	});
